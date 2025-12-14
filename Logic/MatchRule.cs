@@ -1,0 +1,50 @@
+﻿using Logic.Queries;
+using System;
+using System.Text.RegularExpressions;
+
+namespace Logic;
+
+public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmountMin, decimal ExpectedAmountMax, string ExpectedRegEx, string Company, string Description, string Category, bool NeedAttachment)
+{
+    public MatchResult? Match(BankEntry bankEntry)
+    {
+        switch (Type)
+        {
+            case MatchRuleType.TextRegExAndAmountRange:
+                if (bankEntry.Amount >= ExpectedAmountMin && bankEntry.Amount <= ExpectedAmountMax && Regex.IsMatch(bankEntry.Text, ExpectedRegEx, RegexOptions.IgnoreCase))
+                {
+                    return CreateMatch(bankEntry, $"Matched on Amount ({ExpectedAmountMin}) and RegEx ('{ExpectedRegEx}')");
+                }
+
+                break;
+            case MatchRuleType.TextRegEx:
+                if (Regex.IsMatch(bankEntry.Text, ExpectedRegEx, RegexOptions.IgnoreCase))
+                {
+                    return CreateMatch(bankEntry, $"Matched on Text ('{ExpectedRegEx}')");
+                }
+
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+
+        return null;
+    }
+
+    private MatchResult CreateMatch(BankEntry bankEntry, string notes)
+    {
+        return new MatchResult(
+            notes,
+            ReplaceKeywords(Company, bankEntry),
+            ReplaceKeywords(Description, bankEntry),
+            ReplaceKeywords(Category, bankEntry),
+            NeedAttachment);
+    }
+
+    private string ReplaceKeywords(string text, BankEntry bankEntry)
+    {
+        text = text.Replace("<MONTH>", bankEntry.Date.ToString("MMM"));
+        text = text.Replace("<QUARTER>", "Q" + (((bankEntry.Date.Month - 1) / 3) + 1));
+        return text;
+    }
+}
