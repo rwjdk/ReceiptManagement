@@ -1,7 +1,22 @@
-﻿namespace Logic.Queries;
+﻿using System.Text.Json;
+
+namespace Logic.Queries;
 
 public class FinancialRecordQuery
 {
+    public FinancialRecord[] GetExisting(int year, string account)
+    {
+        string path = $"{account}-{year}.json";
+
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        string json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<FinancialRecord[]>(json)!;
+    }
+
     public FinancialRecord[] FromBankEntries(BankEntry[] bankEntries, MatchRule[] matchRules)
     {
         List<FinancialRecord> result = [];

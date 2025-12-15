@@ -113,7 +113,21 @@ public class UnitTest1
                 MatchRuleType.TextRegEx, 0, 0, "^Køb investbev", "Nordea", "Private Banking", "Investeringer", false),
         ];
 
-        FinancialRecord[] fromBankEntries = new FinancialRecordQuery().FromBankEntries(entries, matchRules.ToArray());
+        FinancialRecordQuery financialRecordQuery = new FinancialRecordQuery();
+
+        FinancialRecord[] existing = financialRecordQuery.GetExisting(2025, "main");
+        FinancialRecord[] fromBankEntries = financialRecordQuery.FromBankEntries(entries, matchRules.ToArray());
+
+        foreach (FinancialRecord newEntry in fromBankEntries.Reverse())
+        {
+            if (existing.Any(x => x.Date == newEntry.Date && x.Amount == newEntry.Amount && x.BankText == newEntry.BankText))
+            {
+                continue;
+            }
+
+            //todo add
+        }
+
 
         FinancialRecord[] matched = fromBankEntries.Where(x => x.Matched).OrderBy(x => x.BankText).ToArray();
         FinancialRecord[] notMatched = fromBankEntries.Where(x => !x.Matched).OrderBy(x => x.BankText).ToArray();
