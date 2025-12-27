@@ -1,5 +1,5 @@
 <Solution>
   <Project Path="Logic/Logic.csproj" />
-  <Project Path="ReceiptManagement.RWJ-Invest/ReceiptManagement.RWJ-Invest.csproj" />
+  <Project Path="TestConsole/TestConsole.csproj" Id="3b414c2a-37db-4c1c-9ee1-197498417454" />
   <Project Path="Tests/Tests.csproj" />
 </Solution>

@@ -1,26 +1,31 @@
 ﻿using Logic.Queries;
-using System;
 using System.Text.RegularExpressions;
 
 namespace Logic;
 
-public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmountMin, decimal ExpectedAmountMax, string ExpectedRegEx, string Company, string Description, string Category, bool NeedAttachment)
+public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmountMin, decimal ExpectedAmountMax, string[] ExpectedRegEx, string Company, string? Description, string? Category, bool NeedAttachment, bool NeedYieldCompanyMatch = false)
 {
     public MatchResult? Match(BankEntry bankEntry)
     {
         switch (Type)
         {
             case MatchRuleType.TextRegExAndAmountRange:
-                if (bankEntry.Amount >= ExpectedAmountMin && bankEntry.Amount <= ExpectedAmountMax && Regex.IsMatch(bankEntry.Text, ExpectedRegEx, RegexOptions.IgnoreCase))
+                foreach (string regEx in ExpectedRegEx)
                 {
-                    return CreateMatch(bankEntry, $"Matched on Amount ({ExpectedAmountMin}) and RegEx ('{ExpectedRegEx}')");
+                    if (bankEntry.Amount >= ExpectedAmountMin && bankEntry.Amount <= ExpectedAmountMax && Regex.IsMatch(bankEntry.Text, regEx, RegexOptions.IgnoreCase))
+                    {
+                        return CreateMatch(bankEntry, $"Matched on Amount ({ExpectedAmountMin}) and RegEx ('{ExpectedRegEx}')");
+                    }
                 }
 
                 break;
             case MatchRuleType.TextRegEx:
-                if (Regex.IsMatch(bankEntry.Text, ExpectedRegEx, RegexOptions.IgnoreCase))
+                foreach (string regEx in ExpectedRegEx)
                 {
-                    return CreateMatch(bankEntry, $"Matched on Text ('{ExpectedRegEx}')");
+                    if (Regex.IsMatch(bankEntry.Text, regEx, RegexOptions.IgnoreCase))
+                    {
+                        return CreateMatch(bankEntry, $"Matched on Text ('{ExpectedRegEx}')");
+                    }
                 }
 
                 break;
@@ -38,11 +43,17 @@ public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmo
             ReplaceKeywords(Company, bankEntry),
             ReplaceKeywords(Description, bankEntry),
             ReplaceKeywords(Category, bankEntry),
-            NeedAttachment);
+            NeedAttachment,
+            NeedYieldCompanyMatch);
     }
 
     private string ReplaceKeywords(string text, BankEntry bankEntry)
     {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return text;
+        }
+
         text = text.Replace("<MONTH>", bankEntry.Date.ToString("MMM"));
         text = text.Replace("<QUARTER>", "Q" + (((bankEntry.Date.Month - 1) / 3) + 1));
         return text;
