@@ -1,8 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
-using Logic.Queries;
 
-namespace Logic.Commands;
+namespace Logic;
 
 public class FinancialRecordCommand(FinancialRecordQuery financialRecordQuery)
 {

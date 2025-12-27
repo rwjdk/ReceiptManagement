@@ -1,21 +1,19 @@
 ﻿using AgentFrameworkToolkit.AzureOpenAI;
 using AgentFrameworkToolkit.OpenAI;
 using JetBrains.Annotations;
-using Logic.Queries;
 using Microsoft.Agents.AI;
 using SimpleRag;
 using SimpleRag.DataSources;
 using SimpleRag.DataSources.Pdf;
 using SimpleRag.VectorStorage.Models;
 using System.ComponentModel;
-using Logic.Commands;
 using SimpleRag.DataProviders;
 
 #pragma warning disable RAG003
 
 namespace Logic;
 
-public class FooQuery(
+public class Controller(
     AzureOpenAIAgentFactory agentFactory,
     FinancialRecordQuery financialRecordQuery,
     FinancialRecordCommand financialRecordCommand,
@@ -24,11 +22,14 @@ public class FooQuery(
     Search search,
     IServiceProvider serviceProvider)
 {
-    public async Task<List<FinancialRecord>> Foo(List<MatchRule> matchRules)
+    public async Task<List<FinancialRecord>> AddNewEntries(Action<string> notifyProgress, List<MatchRule> matchRules, string newDateRageCsv, string pathToUnprocessedPdfs, string rootDataFolder, int year, string account)
     {
-        BankEntry[] entries = bankFileQuery.ReadEntries(@"C:\Test\OneMonth.csv");
+        int step = 0;
+        int totalSteps = 5;
 
-        string receiptPath = @"C:\Test\receipts";
+        step++;
+        notifyProgress.Invoke($"{step}/{totalSteps}: Reading new Records");
+        BankEntry[] entries = bankFileQuery.ReadEntries(newDateRageCsv);
 
         AzureOpenAIAgent yieldCompanyAgent = agentFactory.CreateAgent(new AgentOptions
         {
@@ -50,22 +51,22 @@ public class FooQuery(
         {
             CollectionId = collectionId,
             Id = new SourceId("PDFS"),
-            Path = receiptPath,
+            Path = pathToUnprocessedPdfs,
             FilesProvider = new LocalFilesDataProvider(),
         };
 
-        await ingestion.IngestAsync([pdfDataSource], new IngestionOptions
-        {
-            OnProgressNotification = notification => Console.WriteLine(notification.GetFormattedMessage())
-        });
+        int unprocessedFileCount = Directory.GetFiles(pathToUnprocessedPdfs, "*.pdf", SearchOption.AllDirectories).Length;
+        step++;
+        notifyProgress.Invoke($"{step}/{totalSteps}: Ingesting {unprocessedFileCount} unprocessed PDFs into a vector-store");
+        await ingestion.IngestAsync([pdfDataSource]);
 
-
-        int year = 2025;
-        string account = "main";
-        string root = @"C:\Test\Data";
-        List<FinancialRecord> existing = financialRecordQuery.GetExisting(root, year, account);
+        step++;
+        notifyProgress.Invoke($"{step}/{totalSteps}: Reading existing Records");
+        List<FinancialRecord> existing = financialRecordQuery.GetExisting(rootDataFolder, year, account);
         FinancialRecord[] fromBankEntries = await financialRecordQuery.FromBankEntries(entries, matchRules.ToArray());
 
+        step++;
+        notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records");
         foreach (FinancialRecord newEntry in fromBankEntries.Reverse())
         {
             if (existing.Any(x => x.BankEntry == newEntry.BankEntry))
@@ -77,11 +78,11 @@ public class FooQuery(
             {
                 //Good match
                 MatchResult matchResult = newEntry.MatchResults[0];
-                if (matchResult.NeedYieldCompanyMatch)
+                if (matchResult.NeedDividedCompanyMatch)
                 {
-                    Console.WriteLine($"Finding Yield Match for {newEntry.Company}: {newEntry.Description}");
+                    notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Divided Company from {newEntry.BankEntry.Text})");
                     string description = newEntry.Description ?? string.Empty;
-                    ChatClientAgentRunResponse<YieldCompanyResult> response = await yieldCompanyAgent.RunAsync<YieldCompanyResult>("What company does this refer to?: " + newEntry.BankEntry.Text);
+                    ChatClientAgentRunResponse<DividendCompanyResult> response = await yieldCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newEntry.BankEntry.Text);
                     string yieldCompany = response.Result.CompanyName;
                     description = description.Replace("<COMPANY>", yieldCompany);
                     newEntry.Description = description;
@@ -89,28 +90,27 @@ public class FooQuery(
 
                 if (matchResult.NeedAttachment)
                 {
-                    Console.WriteLine($"Finding Attachment Match for {newEntry.Company}: {newEntry.Description}");
+                    notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Related PDF to {newEntry.BankEntry.Text})");
                     SearchResult searchResult = await search.SearchAsync(new SearchOptions
                     {
-                        NumberOfRecordsBack = 1,
-                        SearchQuery = $"Date: {newEntry.BankEntry.Date} - Text: {newEntry.BankEntry.Text} - Amount: {newEntry.BankEntry.Amount} DKK - Company: {newEntry.Company}- Description: {newEntry.Description}",
+                        NumberOfRecordsBack = 1, //todo - get more records back and let an LLM determine which is the most likely match
+                        SearchQuery = $"Date: {newEntry.BankEntry.Date} - Text: {newEntry.BankEntry.Text} - Amount: {newEntry.BankEntry.Amount} DKK - Company: {newEntry.Company} - Description: {newEntry.Description}",
                         CollectionId = collectionId
                     });
                     VectorEntity vectorEntity = searchResult.Entities[0].Record;
 
-
-                    string sourcePath = vectorEntity.SourcePath;
-                    if (sourcePath.StartsWith("\\"))
+                    string filename = vectorEntity.SourcePath;
+                    if (filename.StartsWith("\\")) //todo - remove when fixed in SimpleRag
                     {
-                        sourcePath = sourcePath[1..];
+                        filename = filename[1..];
                     }
 
-                    newEntry.PotentialAttachment = sourcePath;
+                    newEntry.PotentialAttachment = filename;
 
                     if (string.IsNullOrWhiteSpace(newEntry.Description))
                     {
                         //Todo - find all pages of same doc and give to LLM
-                        Console.WriteLine($"Determine what was purchased from {newEntry.Company}");
+                        notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Determine what was purchased from {newEntry.Company})");
                         ChatClientAgentRunResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + vectorEntity.Content);
                         newEntry.Description = response.Result.ProductPurchased;
                         if (string.IsNullOrWhiteSpace(newEntry.Category))
@@ -124,12 +124,14 @@ public class FooQuery(
             existing.Add(newEntry);
         }
 
-        financialRecordCommand.Save(root, year, account, existing);
+        step++;
+        notifyProgress.Invoke($"{step}/{totalSteps}: Merge and save data...");
+        financialRecordCommand.Save(rootDataFolder, year, account, existing);
         return existing;
     }
 
     [UsedImplicitly]
-    private class YieldCompanyResult
+    private class DividendCompanyResult
     {
         [Description("Just the company name, nothing else")]
         public required string CompanyName { get; set; }
@@ -141,7 +143,7 @@ public class FooQuery(
         [Description("Just the product-name/type of product")]
         public required string ProductPurchased { get; set; }
 
-        [Description("Choose among the following categories ['It Udstyr','Kontorudstyr', or 'Services']")]
+        [Description("Choose among the following categories ['It Udstyr','Kontorudstyr', or 'Services']")] //todo: make this part of instructions instead and from a configurable source
         public required string Category { get; set; }
     }
 }

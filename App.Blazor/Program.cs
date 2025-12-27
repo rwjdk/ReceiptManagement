@@ -1,7 +1,6 @@
 using AgentFrameworkToolkit.AzureOpenAI;
+using Blazor;
 using Logic;
-using Logic.Commands;
-using Logic.Queries;
 using Microsoft.Extensions.AI;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using MudBlazor.Services;
@@ -34,7 +33,7 @@ builder.Services.AddSimpleRag(vectorStoreConfiguration, provider => new InMemory
 builder.Services.AddSingleton<BankFileQuery>();
 builder.Services.AddSingleton<FinancialRecordQuery>();
 builder.Services.AddSingleton<FinancialRecordCommand>();
-builder.Services.AddScoped<FooQuery>();
+builder.Services.AddScoped<Controller>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -51,14 +50,20 @@ if (!app.Environment.IsDevelopment())
 
 app.MapGet("/pdf/{fileName}", (string fileName) =>
 {
-    string filePath = Path.Combine(@"C:\Test\receipts\", fileName);
+    string filePath = Path.Combine(Paths.PathToUnprocessedPdfs, fileName);
 
-    if (!System.IO.File.Exists(filePath))
+    if (File.Exists(filePath))
     {
-        return Results.NotFound();
+        return Results.File(filePath, "application/pdf");
     }
 
-    return Results.File(filePath, "application/pdf");
+    filePath = Path.Combine(Paths.PathToProcessedPdfs, fileName);
+    if (File.Exists(filePath))
+    {
+        return Results.File(filePath, "application/pdf");
+    }
+
+    return Results.NotFound();
 });
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);

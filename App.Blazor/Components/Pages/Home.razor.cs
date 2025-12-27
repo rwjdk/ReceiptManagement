@@ -1,9 +1,11 @@
-﻿using Logic;
+﻿using JetBrains.Annotations;
+using Logic;
 using MudBlazor;
 
 namespace Blazor.Components.Pages;
 
-public partial class Home(FooQuery fooQuery)
+[UsedImplicitly]
+public partial class Home(Controller controller)
 {
     private List<MatchRule> matchRules =
     [
@@ -44,7 +46,7 @@ public partial class Home(FooQuery fooQuery)
             MatchRuleType.TextRegEx, 0, 0, ["^Gebyr, overf"], "Nordea", "Gebyrer", "Gebyrer", false),
 
         new("Nordea Egen Salg af Aktier",
-            MatchRuleType.TextRegEx, 0, 0, ["^Fonds 20", "^Salg af aktier 20", "^Salg investbev 20"], "Nordea", "Salg af Aktier (TODO)", "Investeringer", false),
+            MatchRuleType.TextRegEx, 0, 0, ["^Fonds 20", "^Salg af aktier 20", "^Salg investbev 20"], "Nordea", null, "Investeringer", false),
 
         new("OpenAI",
             MatchRuleType.TextRegEx, 0, 0, ["^OPENAI"], "OpenAI", "AI Services", "Services", true),
@@ -77,7 +79,7 @@ public partial class Home(FooQuery fooQuery)
             MatchRuleType.TextRegEx, 0, 0, ["^PORKBUN.COM"], "Porkbun", "Domæne-fornyelse", "Services", true),
 
         new("proshop.dk",
-            MatchRuleType.TextRegEx, 0, 0, ["^proshop.dk"], "Proshop", "TODO", "IT Udstyr", true),
+            MatchRuleType.TextRegEx, 0, 0, ["^proshop.dk"], "Proshop", null, "IT Udstyr", true),
 
         new("Private banking aft.",
             MatchRuleType.TextRegEx, 0, 0, ["^Private banking aft.", "^Salg investbev", "^Køb investbev"], "Nordea", "Private Banking Gebyr", "Investeringer", false),
@@ -88,10 +90,22 @@ public partial class Home(FooQuery fooQuery)
 
     private List<FinancialRecord>? _financialRecords;
     private FinancialRecord? _selected;
+    private string _loadingStatus = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        _financialRecords = await fooQuery.Foo(matchRules);
+        int year = 2025; //todo - combo
+        string account = "main"; //todo - combo
+        string newDateRangeCsv = @"C:\Test\year.csv"; //todo - file upload?
+
+        _financialRecords = await controller.AddNewEntries(NotifyProgress, matchRules, newDateRangeCsv, Paths.PathToUnprocessedPdfs, Paths.RootDataFolder, year, account);
+        _loadingStatus = string.Empty;
+    }
+
+    private void NotifyProgress(string obj)
+    {
+        _loadingStatus = obj;
+        StateHasChanged();
     }
 
     private void SelectRow(DataGridRowClickEventArgs<FinancialRecord> arg)

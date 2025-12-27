@@ -5,7 +5,7 @@ using AgentFrameworkToolkit.AzureOpenAI;
 using AgentFrameworkToolkit.OpenAI;
 using Microsoft.Agents.AI;
 
-namespace Logic.Queries;
+namespace Logic;
 
 public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory)
 {

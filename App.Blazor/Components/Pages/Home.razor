@@ -7,7 +7,7 @@
     <MudItem xs="@(_selected?.PotentialAttachment == null ? 12 : 6)">
         @if (_financialRecords != null)
         {
-            <MudDataGrid Dense Striped T="FinancialRecord" Items="_financialRecords" RowClick="SelectRow" SelectOnRowClick="true">
+            <MudDataGrid Dense Height="100vh" Striped T="FinancialRecord" Items="_financialRecords" RowClick="SelectRow" SelectOnRowClick="true">
                 <Columns>
                     <PropertyColumn Property="x => x.BankEntry.Date" Title="Date" />
                     <PropertyColumn Property="x => x.BankEntry.Text" Title="Text" />
@@ -56,6 +56,7 @@
         else
         {
             <MudProgressLinear Indeterminate />
+            <div style="text-align: center">@_loadingStatus</div>
         }
     </MudItem>
     @if (!string.IsNullOrWhiteSpace(_selected?.PotentialAttachment))

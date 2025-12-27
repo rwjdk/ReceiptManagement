@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using Logic.Queries;
 
 namespace Logic;
 

@@ -1,32 +1,18 @@
 ﻿using AgentFrameworkToolkit.AzureOpenAI;
-using AgentFrameworkToolkit.OpenAI;
-using JetBrains.Annotations;
 using Logic;
-using Logic.Commands;
-using Logic.Queries;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.SemanticKernel.Connectors.InMemory;
 using SimpleRag;
-using SimpleRag.DataProviders;
-using SimpleRag.DataSources;
-using SimpleRag.DataSources.Pdf;
-using SimpleRag.DataSources.Pdf.Chunker;
-using SimpleRag.VectorStorage;
 using SimpleRag.VectorStorage.Models;
-using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.VectorData;
 
 #pragma warning disable RAG003
 
 Console.Clear();
 
-BankEntry[] entries = new BankFileQuery().ReadEntries("TestData\\year.csv");
+BankFileQuery bankFileQuery = new BankFileQuery();
 
-
-//Todo - add multi-regex match instead of just one expected pattern
 List<MatchRule> matchRules =
 [
     new("Danløn Lønservice",
@@ -108,8 +94,6 @@ List<MatchRule> matchRules =
         MatchRuleType.TextRegEx, 0, 0, ["^Renter"], "Nordea", "Renter", "Renter", false),
 ];
 
-string receiptPath = @"C:\Test\receipts";
-
 VectorStoreConfiguration vectorStoreConfiguration = new("UnprocessedAttachments");
 HostApplicationBuilder builder = Host.CreateApplicationBuilder();
 
@@ -141,110 +125,17 @@ Ingestion ingestion = app.Services.GetRequiredService<Ingestion>();
 FinancialRecordQuery financialRecordQuery = new(agentFactory);
 FinancialRecordCommand financialRecordCommand = new(financialRecordQuery);
 
-AzureOpenAIAgent yieldCompanyAgent = agentFactory.CreateAgent(new AgentOptions
-{
-    Model = OpenAIChatModels.Gpt52,
-    Instructions = "You are a Stock Expert",
-    ReasoningEffort = OpenAIReasoningEffort.Minimal
-});
 
-AzureOpenAIAgent invoiceDetailsAgent = agentFactory.CreateAgent(new AgentOptions
-{
-    Model = OpenAIChatModels.Gpt5Mini,
-    Instructions = "You are an Expert in analyzing raw PDF Data and extracting what was bought",
-    ReasoningEffort = OpenAIReasoningEffort.Minimal
-});
-
-
-CollectionId collectionId = new("Finance");
-PdfDataSource pdfDataSource = new(app.Services)
-{
-    CollectionId = collectionId,
-    Id = new SourceId("PDFS"),
-    Path = receiptPath,
-    FilesProvider = new LocalFilesDataProvider(),
-};
-
-await ingestion.IngestAsync([pdfDataSource], new IngestionOptions
-{
-    OnProgressNotification = notification => Console.WriteLine(notification.GetFormattedMessage())
-});
-
+Controller controller = new(agentFactory, financialRecordQuery, financialRecordCommand, bankFileQuery, ingestion, search, app.Services);
 
 int year = 2025;
 string account = "main";
-string root = @"C:\Test\Data";
-List<FinancialRecord> existing = financialRecordQuery.GetExisting(root, year, account);
-FinancialRecord[] fromBankEntries = await financialRecordQuery.FromBankEntries(entries, matchRules.ToArray());
+string rootDataFolder = @"C:\Test";
+string newDateRangeCsv = @"C:\Test\year.csv";
+string pathToUnprocessedPdfs = @"C:\Test\UnprocessedPdfs";
+List<FinancialRecord> records = await controller.AddNewEntries(matchRules, newDateRangeCsv, pathToUnprocessedPdfs, rootDataFolder, year, account);
 
-foreach (FinancialRecord newEntry in fromBankEntries.Reverse())
-{
-    if (existing.Any(x => x.BankEntry == newEntry.BankEntry))
-    {
-        continue;
-    }
+FinancialRecord[] matched = records.Where(x => x.MatchResults.Length == 1).OrderBy(x => x.BankEntry.Text).ToArray();
+FinancialRecord[] notMatched = records.Where(x => x.MatchResults.Length != 1).OrderBy(x => x.BankEntry.Text).ToArray();
 
-    if (newEntry.MatchResults.Length == 1)
-    {
-        //Good match
-        MatchResult matchResult = newEntry.MatchResults[0];
-        if (matchResult.NeedYieldCompanyMatch)
-        {
-            Console.WriteLine($"Finding Yield Match for {newEntry.Company}: {newEntry.Description}");
-            string description = newEntry.Description ?? string.Empty;
-            ChatClientAgentRunResponse<YieldCompanyResult> response = await yieldCompanyAgent.RunAsync<YieldCompanyResult>("What company does this refer to?: " + newEntry.BankEntry.Text);
-            string yieldCompany = response.Result.CompanyName;
-            description = description.Replace("<COMPANY>", yieldCompany);
-            newEntry.Description = description;
-        }
-
-        if (matchResult.NeedAttachment)
-        {
-            Console.WriteLine($"Finding Attachment Match for {newEntry.Company}: {newEntry.Description}");
-            SearchResult searchResult = await search.SearchAsync(new SearchOptions
-            {
-                NumberOfRecordsBack = 1,
-                SearchQuery = $"Date: {newEntry.BankEntry.Date} - Text: {newEntry.BankEntry.Text} - Amount: {newEntry.BankEntry.Amount} DKK - Company: {newEntry.Company}- Description: {newEntry.Description}",
-                CollectionId = collectionId
-            });
-            VectorEntity vectorEntity = searchResult.Entities[0].Record;
-            newEntry.PotentialAttachment = vectorEntity.SourcePath;
-
-            if (string.IsNullOrWhiteSpace(newEntry.Description))
-            {
-                //Todo - find all pages of same doc and give to LLM
-                Console.WriteLine($"Determine what was purchased from {newEntry.Company}");
-                ChatClientAgentRunResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + vectorEntity.Content);
-                newEntry.Description = response.Result.ProductPurchased;
-                if (string.IsNullOrWhiteSpace(newEntry.Category))
-                {
-                    newEntry.Category = response.Result.Category;
-                }
-            }
-        }
-    }
-
-    existing.Add(newEntry);
-}
-
-financialRecordCommand.Save(root, year, account, existing);
-
-FinancialRecord[] matched = existing.Where(x => x.MatchResults.Length == 1).OrderBy(x => x.BankEntry.Text).ToArray();
-FinancialRecord[] notMatched = existing.Where(x => x.MatchResults.Length != 1).OrderBy(x => x.BankEntry.Text).ToArray();
-
-[UsedImplicitly]
-class YieldCompanyResult
-{
-    [Description("Just the company name, nothing else")]
-    public required string CompanyName { get; set; }
-}
-
-[UsedImplicitly]
-class InvoiceResult
-{
-    [Description("Just the product-name/type of product")]
-    public required string ProductPurchased { get; set; }
-
-    [Description("Choose among the following categories ['It Udstyr','Kontorudstyr', or 'Services']")]
-    public required string Category { get; set; }
-}
+//Todo - write new final CSV everytime new data is approved

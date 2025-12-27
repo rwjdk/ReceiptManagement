@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 
-namespace Logic.Queries;
+namespace Logic;
 
 public class BankFileQuery
 {
