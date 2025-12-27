@@ -15,6 +15,8 @@ using SimpleRag.DataSources.Pdf.Chunker;
 using SimpleRag.VectorStorage;
 using SimpleRag.VectorStorage.Models;
 using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.VectorData;
 
 #pragma warning disable RAG003
@@ -22,6 +24,7 @@ using Microsoft.Extensions.VectorData;
 Console.Clear();
 
 BankEntry[] entries = new BankFileQuery().ReadEntries("TestData\\year.csv");
+
 
 //Todo - add multi-regex match instead of just one expected pattern
 List<MatchRule> matchRules =
@@ -107,63 +110,71 @@ List<MatchRule> matchRules =
 
 string receiptPath = @"C:\Test\receipts";
 
+VectorStoreConfiguration vectorStoreConfiguration = new("UnprocessedAttachments");
+HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+
 AzureOpenAIConnection connection = new AzureOpenAIConnection
 {
     Endpoint = "https://sensum365ai.openai.azure.com/",
     ApiKey = "136brUgziYdwzkHcJt8yeWmwsnKtbIvTIrhzBQrkTpWF8D71b6BoJQQJ99BJACfhMk5XJ3w3AAABACOGrq0S"
 };
-AzureOpenAIAgentFactory agentFactory = new(connection);
-AzureOpenAIEmbeddingFactory embeddingFactory = new(connection);
+builder.Services.AddMemoryCache();
+builder.Services.AddAzureOpenAIAgentFactory(connection);
+builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
+builder.Services.AddEmbeddingGenerator(provider =>
+{
+    AzureOpenAIEmbeddingFactory embeddingFactory = provider.GetRequiredService<AzureOpenAIEmbeddingFactory>();
+    return embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small");
+});
 
+builder.Services.AddSimpleRag(vectorStoreConfiguration, provider => new InMemoryVectorStore(new InMemoryVectorStoreOptions
+{
+    EmbeddingGenerator = provider.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()
+}));
+
+IHost app = builder.Build();
+
+AzureOpenAIAgentFactory agentFactory = app.Services.GetRequiredService<AzureOpenAIAgentFactory>();
+Search search = app.Services.GetRequiredService<Search>();
+Ingestion ingestion = app.Services.GetRequiredService<Ingestion>();
 
 FinancialRecordQuery financialRecordQuery = new(agentFactory);
 FinancialRecordCommand financialRecordCommand = new(financialRecordQuery);
 
-AzureOpenAIAgent yieldCompanyAgent = agentFactory.CreateAgent(new AgentOptions()
+AzureOpenAIAgent yieldCompanyAgent = agentFactory.CreateAgent(new AgentOptions
 {
     Model = OpenAIChatModels.Gpt52,
     Instructions = "You are a Stock Expert",
     ReasoningEffort = OpenAIReasoningEffort.Minimal
 });
 
-AzureOpenAIAgent invoiceDetailsAgent = agentFactory.CreateAgent(new AgentOptions()
+AzureOpenAIAgent invoiceDetailsAgent = agentFactory.CreateAgent(new AgentOptions
 {
     Model = OpenAIChatModels.Gpt5Mini,
     Instructions = "You are an Expert in analyzing raw PDF Data and extracting what was bought",
     ReasoningEffort = OpenAIReasoningEffort.Minimal
 });
 
-VectorStoreConfiguration vectorStoreConfiguration = new("UnprocessedAttachments");
-
-
-IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small");
-VectorStore vectorStore = new InMemoryVectorStore(new InMemoryVectorStoreOptions
-{
-    EmbeddingGenerator = embeddingGenerator
-});
-
-VectorStoreQuery vectorStoreQuery = new VectorStoreQuery(embeddingGenerator, vectorStore, vectorStoreConfiguration, null);
-
 
 CollectionId collectionId = new("Finance");
-PdfDataSource pdfDataSource = new(new PdfChunker(), new VectorStoreCommand(vectorStore, vectorStoreQuery, vectorStoreConfiguration))
+PdfDataSource pdfDataSource = new(app.Services)
 {
     CollectionId = collectionId,
     Id = new SourceId("PDFS"),
     Path = receiptPath,
     FilesProvider = new LocalFilesDataProvider(),
 };
-Ingestion ingestion = new();
+
 await ingestion.IngestAsync([pdfDataSource], new IngestionOptions
 {
     OnProgressNotification = notification => Console.WriteLine(notification.GetFormattedMessage())
 });
 
-Search search = new Search(vectorStoreQuery);
 
 int year = 2025;
 string account = "main";
-List<FinancialRecord> existing = financialRecordQuery.GetExisting(year, account);
+string root = @"C:\Test\Data";
+List<FinancialRecord> existing = financialRecordQuery.GetExisting(root, year, account);
 FinancialRecord[] fromBankEntries = await financialRecordQuery.FromBankEntries(entries, matchRules.ToArray());
 
 foreach (FinancialRecord newEntry in fromBankEntries.Reverse())
@@ -216,7 +227,7 @@ foreach (FinancialRecord newEntry in fromBankEntries.Reverse())
     existing.Add(newEntry);
 }
 
-financialRecordCommand.Save(year, account, existing);
+financialRecordCommand.Save(root, year, account, existing);
 
 FinancialRecord[] matched = existing.Where(x => x.MatchResults.Length == 1).OrderBy(x => x.BankEntry.Text).ToArray();
 FinancialRecord[] notMatched = existing.Where(x => x.MatchResults.Length != 1).OrderBy(x => x.BankEntry.Text).ToArray();

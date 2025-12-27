@@ -6,9 +6,9 @@ namespace Logic.Commands;
 
 public class FinancialRecordCommand(FinancialRecordQuery financialRecordQuery)
 {
-    public void Save(int year, string account, IList<FinancialRecord> records)
+    public void Save(string root, int year, string account, IList<FinancialRecord> records)
     {
-        string path = financialRecordQuery.GetTarget(year, account);
+        string path = financialRecordQuery.GetTarget(root, year, account);
 
         CreateBackup(path);
         File.WriteAllText(path, JsonSerializer.Serialize(records), Encoding.UTF8);

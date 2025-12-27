@@ -9,9 +9,9 @@ namespace Logic.Queries;
 
 public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory)
 {
-    public List<FinancialRecord> GetExisting(int year, string account)
+    public List<FinancialRecord> GetExisting(string root, int year, string account)
     {
-        string path = GetTarget(year, account);
+        string path = GetTarget(root, year, account);
 
         if (!File.Exists(path))
         {
@@ -22,9 +22,9 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory)
         return JsonSerializer.Deserialize<List<FinancialRecord>>(json)!;
     }
 
-    public string GetTarget(int year, string account)
+    public string GetTarget(string root, int year, string account)
     {
-        string path = $"{account}-{year}.json";
+        string path = Path.Combine(root, $"{account}-{year}.json");
         return path;
     }
 

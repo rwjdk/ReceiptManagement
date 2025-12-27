@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="App.Blazor/Blazor.csproj" Id="fdfe1df3-2773-42e1-aecb-1ef617f371d5" />
+  <Project Path="App.WinForm/App.WinForm.csproj" Id="7b80e658-f337-424b-a3d4-ea213dfdf574" />
   <Project Path="Logic/Logic.csproj" />
   <Project Path="TestConsole/TestConsole.csproj" Id="3b414c2a-37db-4c1c-9ee1-197498417454" />
   <Project Path="Tests/Tests.csproj" />

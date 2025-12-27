@@ -13,7 +13,7 @@ public class FinancialRecord(
 {
     public BankEntry BankEntry { get; } = bankEntry;
     public MatchResult[] MatchResults { get; } = matchResults;
-    public string? Company { get; init; } = company;
+    public string? Company { get; set; } = company;
     public string? Description { get; set; } = description;
     public string? Category { get; set; } = category;
     public string? PotentialAttachment { get; set; }

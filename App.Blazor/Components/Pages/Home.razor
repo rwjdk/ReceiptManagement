@@ -1,0 +1,69 @@
+﻿@page "/"
+@using Logic
+
+<PageTitle>Home</PageTitle>
+
+<MudGrid>
+    <MudItem xs="@(_selected?.PotentialAttachment == null ? 12 : 6)">
+        @if (_financialRecords != null)
+        {
+            <MudDataGrid Dense Striped T="FinancialRecord" Items="_financialRecords" RowClick="SelectRow" SelectOnRowClick="true">
+                <Columns>
+                    <PropertyColumn Property="x => x.BankEntry.Date" Title="Date" />
+                    <PropertyColumn Property="x => x.BankEntry.Text" Title="Text" />
+                    <TemplateColumn Title="Amount">
+                        <CellTemplate>
+                            @if (context.Item.BankEntry.Amount > 0)
+                            {
+                                <div style="color: green">@context.Item.BankEntry.Amount</div>
+                            }
+                            else
+                            {
+                                <div style="color: red">@context.Item.BankEntry.Amount</div>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Company">
+                        <CellTemplate>
+                            @context.Item.Company
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Description">
+                        <CellTemplate>
+                            @if (string.IsNullOrWhiteSpace(context.Item.Description))
+                            {
+                                <MudTextField Variant="Variant.Outlined" Margin="Margin.Dense" @bind-Value="@context.Item.Description"/>
+                            }
+                            else
+                            {
+                                @context.Item.Description    
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Category">
+                        <CellTemplate>
+                            @context.Item.Category
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Attachment">
+                        <CellTemplate>
+                            @context.Item.PotentialAttachment
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        }
+        else
+        {
+            <MudProgressLinear Indeterminate />
+        }
+    </MudItem>
+    @if (!string.IsNullOrWhiteSpace(_selected?.PotentialAttachment))
+    {
+        <MudItem xs="6" Style="height: 100vh">
+
+            <iframe height="100%" src="@("/pdf/" + _selected.PotentialAttachment)">
+            </iframe>
+        </MudItem>
+    }
+</MudGrid>
