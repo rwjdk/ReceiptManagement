@@ -16,4 +16,9 @@
     <ProjectReference Include="..\Logic\Logic.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Components\Shared\" />
+    <Folder Include="Extensions\" />
+  </ItemGroup>
+
 </Project>

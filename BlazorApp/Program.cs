@@ -14,10 +14,10 @@ AzureOpenAIConnection connection = new()
 builder.Services.AddMemoryCache();
 builder.Services.AddAzureOpenAIAgentFactory(connection);
 builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
-builder.Services.AddSingleton<BankFileQuery>();
-builder.Services.AddSingleton<FinancialRecordQuery>();
-builder.Services.AddSingleton<FinancialRecordCommand>();
-builder.Services.AddScoped<Controller>();
+builder.Services.AddSingleton<BankContentQuery>();
+builder.Services.AddSingleton<AccountQuery>();
+builder.Services.AddSingleton<AccountCommand>();
+builder.Services.AddScoped<FinancialRecordQuery>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 

@@ -2,13 +2,13 @@
 
 namespace Logic;
 
-public class BankFileQuery
+public class BankContentQuery
 {
-    public BankEntry[] ReadEntries(string path)
+    public BankEntry[] ReadEntries(string content)
     {
         List<BankEntry> result = [];
-        string[] lines = File.ReadAllLines(path).Skip(1).ToArray();
-        foreach (string line in lines)
+        string[] lines = content.Split('\n');
+        foreach (string line in lines.Skip(1))
         {
             string[] parts = line.Split(';', StringSplitOptions.RemoveEmptyEntries);
             DateOnly date = DateOnly.ParseExact(parts[0], "yyyy/MM/dd");

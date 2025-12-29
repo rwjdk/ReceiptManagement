@@ -1,12 +1,22 @@
 ﻿using JetBrains.Annotations;
 using Logic;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using MudBlazor;
+using System.Text;
+using AgentFrameworkToolkit.AzureOpenAI;
 
 namespace BlazorApp.Components.Pages;
 
 [UsedImplicitly]
-public partial class Home(Controller controller)
+public partial class Home(FinancialRecordQuery financialRecordQuery, AccountCommand accountCommand, AccountQuery accountQuery, AzureOpenAIEmbeddingFactory embeddingFactory)
 {
+    private FinancialRecord? _selectedRecord;
+    private string _loadingStatus = string.Empty;
+    private Account? _selectedAccount;
+    private Account[]? _accounts;
+    private SqliteCollection<string, VectorStoreRecord>? _vectorStoreCollection;
+
     private List<MatchRule> matchRules =
     [
         new("Danløn Lønservice",
@@ -88,18 +98,26 @@ public partial class Home(Controller controller)
             MatchRuleType.TextRegEx, 0, 0, ["^Renter"], "Nordea", "Renter", "Renter", false),
     ];
 
-    private List<FinancialRecord>? _financialRecords;
-    private FinancialRecord? _selected;
-    private string _loadingStatus = string.Empty;
-
     protected override async Task OnInitializedAsync()
     {
-        int year = 2025; //todo - combo
-        string account = "main"; //todo - combo
-        string newDateRangeCsv = @"C:\Test\year.csv"; //todo - file upload?
+        SqliteVectorStore vectorStore = new SqliteVectorStore("Data Source=" + Paths.RootDataFolder + "\\vector-store.db", new SqliteVectorStoreOptions
+        {
+            EmbeddingGenerator = embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small")
+        });
 
-        _financialRecords = await controller.AddNewEntries(NotifyProgress, matchRules, newDateRangeCsv, Paths.PathToUnprocessedPdfs, Paths.RootDataFolder, year, account);
-        _loadingStatus = string.Empty;
+        _vectorStoreCollection = vectorStore.GetCollection<string, VectorStoreRecord>("Data");
+        await _vectorStoreCollection.EnsureCollectionExistsAsync();
+
+        RefreshAccounts();
+    }
+
+    private void RefreshAccounts()
+    {
+        _accounts = accountQuery.GetAccounts(Paths.RootDataFolder);
+        if (_accounts.Length != 0)
+        {
+            _selectedAccount = _accounts[0];
+        }
     }
 
     private void NotifyProgress(string obj)
@@ -110,6 +128,52 @@ public partial class Home(Controller controller)
 
     private void SelectRow(DataGridRowClickEventArgs<FinancialRecord> arg)
     {
-        _selected = arg.Item;
+        _selectedRecord = arg.Item;
+    }
+
+    private void ChangeAccount(Account account)
+    {
+        _selectedAccount = account;
+    }
+
+    private void CreateAccount()
+    {
+        //todo - dialog
+        int year = DateTime.Today.Year;
+        string accountName = "main";
+        accountCommand.CreateAccount(Paths.RootDataFolder, year, accountName);
+        RefreshAccounts();
+    }
+
+    private void CreateAccountYear()
+    {
+        if (_selectedAccount == null)
+        {
+            return;
+        }
+
+        //todo - dialog
+        int newYear = _selectedAccount.Year + 1;
+        accountCommand.CreateAccount(Paths.RootDataFolder, newYear, _selectedAccount.Name);
+        RefreshAccounts();
+    }
+
+    private async Task UploadFile(IBrowserFile? file)
+    {
+        if (_selectedAccount == null || file == null)
+        {
+            return;
+        }
+
+        //todo - need a busy state system that disable buttons while data is loading
+        await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        using StreamReader reader = new(stream, Encoding.UTF8);
+        string bankFileContent = await reader.ReadToEndAsync();
+
+        List<FinancialRecord> newRecords = await financialRecordQuery.GetNewRecords(NotifyProgress, _vectorStoreCollection!, matchRules, bankFileContent, Paths.PathToUnprocessedPdfs, _selectedAccount);
+        //todo - inform how many new records
+        _selectedAccount.Records.AddRange(newRecords);
+        _loadingStatus = string.Empty;
+        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
     }
 }
