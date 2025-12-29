@@ -2,7 +2,7 @@
 using Logic;
 using MudBlazor;
 
-namespace Blazor.Components.Pages;
+namespace BlazorApp.Components.Pages;
 
 [UsedImplicitly]
 public partial class Home(Controller controller)
@@ -25,7 +25,7 @@ public partial class Home(Controller controller)
             MatchRuleType.TextRegEx, 0, 0, ["^Udbytte"], "Nordea", "Udbytte (<COMPANY>)", "Investeringer", false, true),
 
         new("Telenor",
-            MatchRuleType.TextRegEx, 0, 0, ["^Telenor.dk"], "Telenor", "Telefon (<MONTH>)", "Services", false),
+            MatchRuleType.TextRegEx, 0, 0, ["^Telenor.dk"], "Telenor", "Telefon (<MONTH>)", "Services", true),
 
         new("Microsoft Azure",
             MatchRuleType.TextRegEx, 0, 0, ["^MicrosoftG", "^Microsoft-G", "^MICROSOFTÆG"], "Microsoft", "Azure Subscription (<MONTH>)", "Services", true),

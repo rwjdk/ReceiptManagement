@@ -1,16 +1,11 @@
 using AgentFrameworkToolkit.AzureOpenAI;
-using Blazor;
+using BlazorApp;
 using Logic;
-using Microsoft.Extensions.AI;
-using Microsoft.SemanticKernel.Connectors.InMemory;
 using MudBlazor.Services;
-using SimpleRag;
-using SimpleRag.VectorStorage.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMudServices();
 
-VectorStoreConfiguration vectorStoreConfiguration = new("UnprocessedAttachments");
 AzureOpenAIConnection connection = new()
 {
     Endpoint = builder.Configuration["AzureOpenAIEndpoint"]!,
@@ -19,24 +14,12 @@ AzureOpenAIConnection connection = new()
 builder.Services.AddMemoryCache();
 builder.Services.AddAzureOpenAIAgentFactory(connection);
 builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
-builder.Services.AddEmbeddingGenerator(provider =>
-{
-    AzureOpenAIEmbeddingFactory embeddingFactory = provider.GetRequiredService<AzureOpenAIEmbeddingFactory>();
-    return embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small");
-});
-
-builder.Services.AddSimpleRag(vectorStoreConfiguration, provider => new InMemoryVectorStore(new InMemoryVectorStoreOptions
-{
-    EmbeddingGenerator = provider.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()
-}));
-
 builder.Services.AddSingleton<BankFileQuery>();
 builder.Services.AddSingleton<FinancialRecordQuery>();
 builder.Services.AddSingleton<FinancialRecordCommand>();
 builder.Services.AddScoped<Controller>();
 
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
 
@@ -72,7 +55,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapRazorComponents<Blazor.Components.App>()
+app.MapRazorComponents<BlazorApp.Components.App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();

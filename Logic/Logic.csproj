@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="AgentFrameworkToolkit.AzureOpenAI" Version="1.0.0-preview.251226.1" />
     <PackageReference Include="Microsoft.SemanticKernel.Connectors.InMemory" Version="1.68.0-preview" />
-    <PackageReference Include="SimpleRag" Version="1.0.1" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.SqliteVec" Version="1.68.0-preview" />
+    <PackageReference Include="PdfPig" Version="0.1.10" />
   </ItemGroup>
-
 </Project>

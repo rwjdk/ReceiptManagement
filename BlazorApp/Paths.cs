@@ -1,4 +1,4 @@
-﻿namespace Blazor;
+﻿namespace BlazorApp;
 
 public class Paths
 {
