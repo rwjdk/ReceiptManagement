@@ -18,6 +18,7 @@ builder.Services.AddSingleton<BankContentQuery>();
 builder.Services.AddSingleton<AccountQuery>();
 builder.Services.AddSingleton<AccountCommand>();
 builder.Services.AddScoped<FinancialRecordQuery>();
+builder.Services.AddScoped<ConfigurationQuery>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 

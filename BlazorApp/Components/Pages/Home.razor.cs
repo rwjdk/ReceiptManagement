@@ -5,16 +5,23 @@ using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using MudBlazor;
 using System.Text;
 using AgentFrameworkToolkit.AzureOpenAI;
+using Microsoft.AspNetCore.Components;
 
 namespace BlazorApp.Components.Pages;
 
 [UsedImplicitly]
-public partial class Home(FinancialRecordQuery financialRecordQuery, AccountCommand accountCommand, AccountQuery accountQuery, AzureOpenAIEmbeddingFactory embeddingFactory)
+public partial class Home(
+    FinancialRecordQuery financialRecordQuery,
+    AccountCommand accountCommand,
+    AccountQuery accountQuery,
+    AzureOpenAIEmbeddingFactory embeddingFactory,
+    ConfigurationQuery configurationQuery)
 {
+    private const string root = Paths.RootDataFolder;
     private FinancialRecord? _selectedRecord;
     private string _loadingStatus = string.Empty;
     private Account? _selectedAccount;
-    private Account[]? _accounts;
+    private List<Account> _accounts = [];
     private SqliteCollection<string, VectorStoreRecord>? _vectorStoreCollection;
 
     private List<MatchRule> matchRules =
@@ -98,8 +105,27 @@ public partial class Home(FinancialRecordQuery financialRecordQuery, AccountComm
             MatchRuleType.TextRegEx, 0, 0, ["^Renter"], "Nordea", "Renter", "Renter", false),
     ];
 
+    private string[] _categories = ["Gebyrer", "Indkomst", "Investeringer", "IT Udstyr", "Kontorudstyr", "Lønninger", "Services", "Sponsorat", "Skat", "Udbytte", "Renter"];
+    private bool _onlyUnconfirmed;
+    private Configuration? _configuration;
+    private decimal _openingBalance;
+
+    public IEnumerable<FinancialRecord> LinesToShow
+    {
+        get
+        {
+            if (_selectedAccount == null)
+            {
+                return [];
+            }
+
+            return _onlyUnconfirmed ? _selectedAccount.Records.Where(x => !x.Confirmed).OrderByDescending(x => x.LineNum) : _selectedAccount.Records.OrderByDescending(x => x.LineNum);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        _configuration = configurationQuery.GetConfiguration(Paths.RootDataFolder);
         SqliteVectorStore vectorStore = new SqliteVectorStore("Data Source=" + Paths.RootDataFolder + "\\vector-store.db", new SqliteVectorStoreOptions
         {
             EmbeddingGenerator = embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small")
@@ -113,11 +139,24 @@ public partial class Home(FinancialRecordQuery financialRecordQuery, AccountComm
 
     private void RefreshAccounts()
     {
-        _accounts = accountQuery.GetAccounts(Paths.RootDataFolder);
-        if (_accounts.Length != 0)
+        if (_configuration == null)
         {
-            _selectedAccount = _accounts[0];
+            return;
         }
+
+        _accounts = accountQuery.GetAccounts(root);
+        int year = DateTime.Today.Year;
+        foreach (string neededAccountName in _configuration.NeededAccountNames)
+        {
+            Account? existingAccount = _accounts.FirstOrDefault(x => x.Name == neededAccountName && x.Year == year);
+            if (existingAccount == null)
+            {
+                //Create the account and Year
+                _accounts.Add(accountCommand.CreateAccount(root, year, neededAccountName));
+            }
+        }
+
+        _selectedAccount = _accounts.OrderBy(x => x.DisplayName).FirstOrDefault(x => x.Year == year);
     }
 
     private void NotifyProgress(string obj)
@@ -136,28 +175,6 @@ public partial class Home(FinancialRecordQuery financialRecordQuery, AccountComm
         _selectedAccount = account;
     }
 
-    private void CreateAccount()
-    {
-        //todo - dialog
-        int year = DateTime.Today.Year;
-        string accountName = "main";
-        accountCommand.CreateAccount(Paths.RootDataFolder, year, accountName);
-        RefreshAccounts();
-    }
-
-    private void CreateAccountYear()
-    {
-        if (_selectedAccount == null)
-        {
-            return;
-        }
-
-        //todo - dialog
-        int newYear = _selectedAccount.Year + 1;
-        accountCommand.CreateAccount(Paths.RootDataFolder, newYear, _selectedAccount.Name);
-        RefreshAccounts();
-    }
-
     private async Task UploadFile(IBrowserFile? file)
     {
         if (_selectedAccount == null || file == null)
@@ -174,6 +191,80 @@ public partial class Home(FinancialRecordQuery financialRecordQuery, AccountComm
         //todo - inform how many new records
         _selectedAccount.Records.AddRange(newRecords);
         _loadingStatus = string.Empty;
+        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+    }
+
+    private void UpdateRecord(FinancialRecord record)
+    {
+        if (_selectedAccount == null)
+        {
+            return;
+        }
+
+        if (!record.IsComplete)
+        {
+            record.Confirmed = false;
+        }
+
+        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+    }
+
+    private void Confirm(FinancialRecord record)
+    {
+        if (_selectedAccount == null)
+        {
+            return;
+        }
+
+        record.Confirmed = !record.Confirmed;
+
+        if (record.Confirmed)
+        {
+            //Record is now confirmed. 
+            if (!string.IsNullOrWhiteSpace(record.Attachment))
+            {
+                //Rename attachment and move to confirmed Attachments
+                string newAttachmentName = record.Company + " - " + record.Description + Path.GetExtension(record.Attachment);
+                string source = Path.Combine(Paths.PathToUnprocessedPdfs, record.Attachment);
+                string target = Path.Combine(Paths.PathToProcessedPdfs, newAttachmentName);
+                File.Move(source, target);
+                record.Attachment = newAttachmentName;
+            }
+        }
+        else
+        {
+            //Record is now un-confirmed. 
+            if (!string.IsNullOrWhiteSpace(record.Attachment))
+            {
+                //Move to confirmed Attachment back to un-confirmed (but leave name)
+                string source = Path.Combine(Paths.PathToProcessedPdfs, record.Attachment);
+                string target = Path.Combine(Paths.PathToUnprocessedPdfs, record.Attachment);
+                File.Move(source, target);
+            }
+        }
+
+        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+    }
+
+    private void ChooseAttachment(IBrowserFile? file, FinancialRecord record)
+    {
+        if (file == null || _selectedAccount == null)
+        {
+            return;
+        }
+
+        record.Attachment = file.Name;
+        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+    }
+
+    private void RemoveAttachment(FinancialRecord record)
+    {
+        if (_selectedAccount == null)
+        {
+            return;
+        }
+
+        record.Attachment = null;
         accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
     }
 }

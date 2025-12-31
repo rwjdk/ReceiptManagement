@@ -1,4 +1,6 @@
-﻿namespace Logic;
+﻿using System.Text.Json.Serialization;
+
+namespace Logic;
 
 public class Account
 {
@@ -7,7 +9,20 @@ public class Account
     public required int Year { get; set; }
     public required string Name { get; set; }
     public required List<FinancialRecord> Records { get; set; }
+
+    [JsonIgnore]
     public string DisplayName => $"{Name} ({Year})";
+
+    public string GetFolderName()
+    {
+        char[] invalid = Path.GetInvalidFileNameChars();
+        foreach (char c in invalid)
+        {
+            Name = Name.Replace(c, '_');
+        }
+
+        return $"{Name} ({Year})";
+    }
 
     public string GetFileName()
     {
@@ -17,6 +32,6 @@ public class Account
             Name = Name.Replace(c, '_');
         }
 
-        return $"{Name}-{Year}.{Extension}";
+        return $"{Name} ({Year}).{Extension}";
     }
 }

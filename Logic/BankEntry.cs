@@ -1,3 +1,3 @@
 ﻿namespace Logic;
 
-public record BankEntry(DateOnly Date, string Text, decimal Amount);
+public record BankEntry(DateOnly Date, string Text, decimal Amount, decimal Balance);

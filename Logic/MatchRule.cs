@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using SQLitePCL;
 
 namespace Logic;
 
@@ -46,7 +47,7 @@ public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmo
             NeedYieldCompanyMatch);
     }
 
-    private string ReplaceKeywords(string text, BankEntry bankEntry)
+    private string? ReplaceKeywords(string? text, BankEntry bankEntry)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

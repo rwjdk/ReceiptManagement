@@ -33,7 +33,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
 
         step++;
         notifyProgress.Invoke($"{step}/{totalSteps}: Reading new Records");
-        BankEntry[] entries = bankContentQuery.ReadEntries(newContent);
+        BankEntry[] entries = bankContentQuery.ReadEntries(newContent, account);
 
         AzureOpenAIAgent dividendCompanyAgent = agentFactory.CreateAgent(new AgentOptions
         {
@@ -144,6 +144,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
 
         step++;
         notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records");
+        int nextLineNum = account.Records.MaxBy(x => x.LineNum)?.LineNum ?? 0;
         foreach (FinancialRecord newRecord in fromBankEntries.Reverse())
         {
             if (account.Records.Any(x => x.BankEntry == newRecord.BankEntry))
@@ -155,7 +156,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
             {
                 //Good match
                 MatchResult matchResult = newRecord.MatchResults[0];
-                if (matchResult.NeedDividedCompanyMatch) //todo - add back in
+                if (false && matchResult.NeedDividedCompanyMatch) //todo - add back in
                 {
                     notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Divided Company from {newRecord.BankEntry.Text})");
                     string description = newRecord.Description ?? string.Empty;
@@ -165,7 +166,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                     newRecord.Description = description;
                 }
 
-                if (matchResult.NeedAttachment)
+                if (false && matchResult.NeedAttachment)
                 {
                     List<VectorStoreRecord> vectorStoreSearchResult = [];
                     notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Related PDF to {newRecord.BankEntry.Text})");
@@ -188,7 +189,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                     ChatClientAgentRunResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
                     VectorStoreRecord? bestMatch = vectorStoreSearchResult.FirstOrDefault(x => x.FileName.Equals(responseDocumentMatch.Result.FileName, StringComparison.CurrentCultureIgnoreCase));
 
-                    newRecord.PotentialAttachment = bestMatch?.FileName;
+                    newRecord.Attachment = bestMatch?.FileName;
 
                     if (string.IsNullOrWhiteSpace(newRecord.Description) && bestMatch != null)
                     {
@@ -203,7 +204,9 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                 }
             }
 
+            newRecord.LineNum = nextLineNum;
             newRecords.Add(newRecord);
+            nextLineNum++;
         }
 
         step++;
@@ -222,10 +225,10 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
             {
                 case 1:
                     MatchResult match = matchResults[0];
-                    result.Add(new FinancialRecord(bankEntry, matchResults, match.Company, match.Description, match.Category));
+                    result.Add(new FinancialRecord(bankEntry, matchResults, match.Company, match.Description, match.Category, false));
                     break;
                 default:
-                    result.Add(new FinancialRecord(bankEntry, matchResults, null, null, null));
+                    result.Add(new FinancialRecord(bankEntry, matchResults, null, null, null, false));
                     break;
             }
         }

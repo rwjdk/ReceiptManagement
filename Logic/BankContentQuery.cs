@@ -4,7 +4,7 @@ namespace Logic;
 
 public class BankContentQuery
 {
-    public BankEntry[] ReadEntries(string content)
+    public BankEntry[] ReadEntries(string content, Account account)
     {
         List<BankEntry> result = [];
         string[] lines = content.Split('\n');
@@ -17,7 +17,11 @@ public class BankContentQuery
                 NumberDecimalSeparator = ","
             });
             string text = parts[3];
-            result.Add(new BankEntry(date, text, amount));
+            decimal balance = decimal.Parse(parts[4], new NumberFormatInfo
+            {
+                NumberDecimalSeparator = ","
+            });
+            result.Add(new BankEntry(date, text, amount, balance));
         }
 
         return result.ToArray();

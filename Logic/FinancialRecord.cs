@@ -10,14 +10,19 @@ public class FinancialRecord(
     MatchResult[] matchResults,
     string? company,
     string? description,
-    string? category)
+    string? category,
+    bool confirmed)
 {
+    public int LineNum { get; set; }
     public BankEntry BankEntry { get; } = bankEntry;
     public MatchResult[] MatchResults { get; } = matchResults;
     public string? Company { get; set; } = company;
     public string? Description { get; set; } = description;
     public string? Category { get; set; } = category;
-    public string? PotentialAttachment { get; set; }
+    public bool Confirmed { get; set; } = confirmed;
+    public string? Attachment { get; set; }
+
+    public bool IsComplete => !string.IsNullOrWhiteSpace(Company) && !string.IsNullOrWhiteSpace(Description) && !string.IsNullOrWhiteSpace(Category);
 
     public override string ToString()
     {

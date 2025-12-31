@@ -1,17 +1,35 @@
-﻿using System.ComponentModel;
-using System.Text;
-using System.Text.Json;
-using AgentFrameworkToolkit.AzureOpenAI;
-using AgentFrameworkToolkit.OpenAI;
-using Microsoft.Agents.AI;
+﻿using System.Text.Json;
 
 namespace Logic;
 
-public class AccountQuery(AzureOpenAIAgentFactory agentFactory)
+public class AccountQuery()
 {
-    public Account[] GetAccounts(string rootFolder)
+    public List<Account> GetAccounts(string rootFolder)
     {
-        string[] accountFiles = Directory.GetFiles(rootFolder, $"*.{Account.Extension}");
-        return accountFiles.Select(x => JsonSerializer.Deserialize<Account>(File.ReadAllText(x))!).ToArray(); //todo - safety - if you can deserialize
+        string[] accountFiles = Directory.GetFiles(rootFolder, $"*.{Account.Extension}", SearchOption.AllDirectories);
+        return accountFiles.Select(x => JsonSerializer.Deserialize<Account>(File.ReadAllText(x))!).ToList(); //todo - safety - if you can deserialize
+    }
+
+    public string GetAccountFolder(string rootFolder, Account account)
+    {
+        string accountsFolder = GetAccountsFolder(rootFolder);
+        string accountFolder = Path.Combine(accountsFolder, account.GetFolderName());
+        if (!Directory.Exists(accountFolder))
+        {
+            Directory.CreateDirectory(accountFolder);
+        }
+
+        return accountFolder;
+    }
+
+    private string GetAccountsFolder(string rootFolder)
+    {
+        string accountFolder = Path.Combine(rootFolder, "Accounts");
+        if (!Directory.Exists(accountFolder))
+        {
+            Directory.CreateDirectory(accountFolder);
+        }
+
+        return accountFolder;
     }
 }

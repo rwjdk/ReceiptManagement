@@ -17,7 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Components\Shared\" />
     <Folder Include="Extensions\" />
   </ItemGroup>
 

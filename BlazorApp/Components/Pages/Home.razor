@@ -3,85 +3,119 @@
 @using Logic
 
 <PageTitle>Home</PageTitle>
-<MudGrid>
-    <MudItem xs="7">
+<MudGrid Spacing="1">
+    <MudItem xs="8">
         <div style="text-align: center">@_loadingStatus</div>
-        <MudGrid>
-            <MudItem>
-                <RSelect T="Account" Label="Account" Items="_accounts" Value="_selectedAccount" ToStringFunc="account => account.DisplayName" ValueChanged="account => ChangeAccount(account)"/>
+        <MudGrid Style="align-items: center">
+            <MudItem Style="width: 500px">
+                <RSelect T="Account" Label="Account" Items="_accounts.OrderBy(x => x.DisplayName)" Value="_selectedAccount" ToStringFunc="account => account.DisplayName" ValueChanged="account => ChangeAccount(account)" />
             </MudItem>
             <MudItem>
-                <MudFileUpload T="IBrowserFile" Accept=".csv" FilesChanged="UploadFile" MaximumFileCount="100">
+                <MudFileUpload T="IBrowserFile" Accept=".csv" FilesChanged="UploadFile" MaximumFileCount="1">
                     <ActivatorContent>
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.CloudUpload">
-                            New Bank file
-                        </MudButton>
+                        <RIconButton Icon="@Icons.Material.Filled.CloudUpload" />
                     </ActivatorContent>
                 </MudFileUpload>
             </MudItem>
             <MudItem>
-                <RButton OnClick="CreateAccountYear">Create New Year</RButton>
-                <RButton OnClick="CreateAccount">Create New Account</RButton>
+                <RCheckBox Label="Only show un-confirmed" @bind-Value="_onlyUnconfirmed" />
             </MudItem>
         </MudGrid>
-        @if (_accounts != null)
+        @if (_selectedAccount != null)
         {
-            if (_selectedAccount != null)
-            {
-                <MudDataGrid Dense Height="100vh" Striped T="FinancialRecord" Items="_selectedAccount.Records.OrderByDescending(x => x.BankEntry.Date)" RowClick="SelectRow" SelectOnRowClick="true">
-                    <Columns>
-                        <PropertyColumn Property="x => x.BankEntry.Date" Title="Date" CellClass="f10"/>
-                        <PropertyColumn Property="x => x.BankEntry.Text" Title="Text" CellClass="f10" />
-                        <TemplateColumn Title="Amount" CellClass="f10">
-                            <CellTemplate>
-                                <div style="@($"color : {(context.Item.BankEntry.Amount > 0 ? "green" : "red")}")" class="align-end">@context.Item.BankEntry.Amount</div>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Company" CellClass="f10">
-                            <CellTemplate>
-                                @context.Item.Company
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Description" CellClass="f10">
-                            <CellTemplate>
-                                @if (string.IsNullOrWhiteSpace(context.Item.Description))
+            <MudDataGrid Dense
+                         Height="90vh"
+                         Striped T="FinancialRecord"
+                         Items="@LinesToShow"
+                         RowClick="SelectRow"
+                         SelectOnRowClick="true"
+                         ReadOnly="false"
+                         EditMode="DataGridEditMode.Cell"
+                         SortMode="SortMode.None"
+                         Filterable="false"
+                         ColumnResizeMode="ResizeMode.Column"
+                         CommittedItemChanges="record => UpdateRecord(record)">
+                <Columns>
+                    <TemplateColumn Title="" Editable="false">
+                        <CellTemplate>
+                            @if (context.Item.IsComplete)
+                            {
+                                @if (context.Item.Confirmed)
                                 {
-                                    <MudTextField Variant="Variant.Outlined" Margin="Margin.Dense" @bind-Value="@context.Item.Description"/>
+                                    <RIconButton OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBox" Color="Color.Success" />
                                 }
                                 else
                                 {
-                                    @context.Item.Description
+                                    <RIconButton OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBoxOutlineBlank" />
                                 }
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Category" CellClass="f10">
-                            <CellTemplate>
-                                @context.Item.Category
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="Attachment" CellClass="f10">
-                            <CellTemplate>
-                                @context.Item.PotentialAttachment
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                </MudDataGrid>
-            }
-        }
-        else
-        {
-            <MudProgressLinear Indeterminate/>
+                            }
+                            else
+                            {
+                                <RIconButton Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Error" Disabled ToolTip="Not all data is provided and attachments confirmed" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Editable="false" Property="@(x => x.BankEntry.Date.ToString("dd. MMM"))" Title="Date" CellClass="f11" CellStyle="width:30px"/>
+                    <PropertyColumn Editable="false" Property="x => x.BankEntry.Text" Title="Text" CellClass="f11" CellStyle="width:100px"/>
+                    <TemplateColumn Editable="false" Title="Amount" CellClass="f11" CellStyle="width:50px">
+                        <CellTemplate>
+                            <div style="@($"color : {(context.Item.BankEntry.Amount > 0 ? "green" : "red")}")" class="align-end">
+                                @context.Item.BankEntry.Amount.ToString("N2")
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Required="false" Editable="true" Property="x => x.Company" Title="Company" CellClass="f11"/>
+                    <PropertyColumn Required="false" Editable="true" Property="x => x.Description" Title="Description" CellClass="f11"/>
+                    <TemplateColumn Editable="true" Title="Category" CellClass="f11">
+                        <EditTemplate>
+                            <RSelect @bind-Value="@context.Item.Category" Items="_categories.OrderBy(x => x)"/>
+                        </EditTemplate>
+                        <CellTemplate>
+                            @context.Item.Category
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Editable="false" Title="Att" CellClass="f11">
+                        <CellTemplate>
+                            <MudGrid>
+                                <MudItem xs="1">
+                                    <MudFileUpload Disabled="@context.Item.Confirmed" T="IBrowserFile" Accept=".pdf" FilesChanged="file => ChooseAttachment(file, context.Item)" MaximumFileCount="1">
+                                        <ActivatorContent>
+                                            @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                            {
+                                                <RIconButton Size="Size.Small" Icon="@Icons.Material.Filled.InsertLink"/>
+                                            }
+                                            else
+                                            {
+                                                <RIconButton Icon="@Icons.Material.Filled.Add"/>
+                                            }
+                                        </ActivatorContent>
+                                    </MudFileUpload>
+                                </MudItem>
+                                <MudItem xs="1">
+                                    @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                    {
+                                        <RIconButton ToolTip="Remove Attachment" Icon="@Icons.Material.Outlined.Delete" OnClick="() => RemoveAttachment(context.Item)"/>
+                                    }
+                                </MudItem>
+                            </MudGrid>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Balance" Editable="false" CellClass="f11">
+                        <CellTemplate>
+                            @context.Item.BankEntry.Balance.ToString("N2")
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
         }
     </MudItem>
 
-    <MudItem xs="5" Style="height: 100vh">
-        @if (!string.IsNullOrWhiteSpace(_selectedRecord?.PotentialAttachment))
+    <MudItem xs="4" Style="height: 93vh">
+        @if (!string.IsNullOrWhiteSpace(_selectedRecord?.Attachment))
         {
             <h2>@_selectedRecord.Company | @_selectedRecord.Description | @Math.Abs(_selectedRecord.BankEntry.Amount) DKK</h2>
 
-            <iframe height="100%" src="@("/pdf/" + _selectedRecord.PotentialAttachment)">
+            <iframe height="100%" src="@("/pdf/" + _selectedRecord.Attachment)">
             </iframe>
         }
         else
