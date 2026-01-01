@@ -1,10 +1,41 @@
 ﻿using System.Text.RegularExpressions;
-using SQLitePCL;
 
-namespace Logic;
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
 
-public record MatchRule(string RuleName, MatchRuleType Type, decimal ExpectedAmountMin, decimal ExpectedAmountMax, string[] ExpectedRegEx, string Company, string? Description, string? Category, bool NeedAttachment, bool NeedYieldCompanyMatch = false)
+namespace Logic.Models;
+
+public class MatchRule
 {
+    public MatchRule()
+    {
+        //Needed for config de-serialization
+    }
+
+    public MatchRule(string ruleName, MatchRuleType type, decimal expectedAmountMin, decimal expectedAmountMax, string[] expectedRegEx, string? company, string? description, string? category, bool needAttachment, bool needYieldCompanyMatch = false)
+    {
+        RuleName = ruleName;
+        Type = type;
+        ExpectedAmountMin = expectedAmountMin;
+        ExpectedAmountMax = expectedAmountMax;
+        ExpectedRegEx = expectedRegEx;
+        Company = company;
+        Description = description;
+        Category = category;
+        NeedAttachment = needAttachment;
+        NeedYieldCompanyMatch = needYieldCompanyMatch;
+    }
+
+    public string RuleName { get; init; }
+    public MatchRuleType Type { get; init; }
+    public decimal ExpectedAmountMin { get; init; }
+    public decimal ExpectedAmountMax { get; init; }
+    public string[] ExpectedRegEx { get; init; }
+    public string? Company { get; init; }
+    public string? Description { get; init; }
+    public string? Category { get; init; }
+    public bool NeedAttachment { get; init; }
+    public bool NeedYieldCompanyMatch { get; init; }
+
     public MatchResult? Match(BankEntry bankEntry)
     {
         switch (Type)

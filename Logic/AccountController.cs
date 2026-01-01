@@ -1,10 +1,9 @@
 ﻿using AgentFrameworkToolkit.AzureOpenAI;
 using AgentFrameworkToolkit.OpenAI;
-using Azure;
 using JetBrains.Annotations;
+using Logic.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.VectorData;
-using Microsoft.SemanticKernel.Connectors.InMemory;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using System.ComponentModel;
 using System.Globalization;
@@ -12,28 +11,59 @@ using System.Text;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 
-#pragma warning disable RAG003
-
 namespace Logic;
 
-public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankContentQuery bankContentQuery)
+//todo- refactor and clean
+public class AccountController(AzureOpenAIAgentFactory agentFactory, AzureOpenAIEmbeddingFactory embeddingFactory)
 {
-    public async Task<List<FinancialRecord>> GetNewRecords(
+    public async Task ReprocessRecord(AccountRecord accountRecord, MatchRule[] matchRules)
+    {
+        await Task.CompletedTask;
+        AccountRecord record = FromBankEntries([accountRecord.BankEntry], matchRules)[0];
+        accountRecord.Company = record.Company;
+        accountRecord.Description = record.Description;
+        accountRecord.Category = record.Category;
+        accountRecord.MatchResults = record.MatchResults;
+
+        //todo - reprocess AI things
+    }
+
+    public async Task<List<AccountRecord>> GetNewRecords(
+        int year,
         Action<string> notifyProgress,
-        SqliteCollection<string, VectorStoreRecord> vectorStoreCollection,
-        List<MatchRule> matchRules,
+        MatchRule[] matchRules,
         string newContent,
         string pathToUnprocessedPdfs,
         Account account)
     {
-        List<FinancialRecord> newRecords = [];
+        SqliteVectorStore vectorStore = new($"Data Source={Path.GetTempPath()}\\vector-store-{year}.db", new SqliteVectorStoreOptions
+        {
+            EmbeddingGenerator = embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small")
+        });
 
-        int step = 0;
-        int totalSteps = 5;
+        SqliteCollection<string, VectorStoreRecord> vectorStoreCollection = vectorStore.GetCollection<string, VectorStoreRecord>("Data");
+        await vectorStoreCollection.EnsureCollectionExistsAsync();
 
-        step++;
-        notifyProgress.Invoke($"{step}/{totalSteps}: Reading new Records");
-        BankEntry[] entries = bankContentQuery.ReadEntries(newContent, account);
+        List<AccountRecord> newRecords = [];
+        BankEntry[] entries = ReadBankEntries(newContent, account).Where(x => x.Date.Year == year).ToArray();
+        AccountRecord[] fromBankEntries = FromBankEntries(entries, matchRules.ToArray());
+        List<AccountRecord> toProcess = [];
+        foreach (AccountRecord newRecord in fromBankEntries.Reverse())
+        {
+            if (account.Records.Any(x => x.BankEntry == newRecord.BankEntry))
+            {
+                continue;
+            }
+
+            toProcess.Add(newRecord);
+        }
+
+        if (toProcess.Count == 0)
+        {
+            return [];
+        }
+
+        notifyProgress.Invoke($"Found {toProcess.Count} new records to process");
 
         AzureOpenAIAgent dividendCompanyAgent = agentFactory.CreateAgent(new AgentOptions
         {
@@ -58,19 +88,24 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
 
         string[] existingIds = existingRecords.Select(x => x.Id).ToArray();
         string[] unprocessedPdfs = Directory.GetFiles(pathToUnprocessedPdfs, "*.pdf", SearchOption.AllDirectories);
-        int unprocessedFileCount = unprocessedPdfs.Length;
-        step++;
-        int counter = 0;
+
         List<string> activeIds = [];
+        List<string> toIngest = [];
         foreach (string pdfPath in unprocessedPdfs)
         {
             activeIds.Add(pdfPath);
-            counter++;
             if (existingIds.Contains(pdfPath))
             {
                 continue;
             }
 
+            toIngest.Add(pdfPath);
+        }
+
+        int counter = 0;
+        foreach (string pdfPath in toIngest)
+        {
+            counter++;
             byte[] bytes = await File.ReadAllBytesAsync(pdfPath);
             PdfDocument document = PdfDocument.Open(bytes);
             string pdfText = string.Empty;
@@ -85,6 +120,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                 pdfText += page.Text + Environment.NewLine;
             }
 
+            notifyProgress.Invoke($"- [{counter}/{toIngest.Count}] Ingesting unprocessed PDF to vector-store '{Path.GetFileName(pdfPath)}'");
             if (string.IsNullOrWhiteSpace(pdfText))
             {
                 continue;
@@ -108,8 +144,6 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                                        """;
                 ChatClientAgentRunResponse<PdfCleanUp> response = await invoiceDetailsAgent.RunAsync<PdfCleanUp>(instructions);
 
-                notifyProgress.Invoke($"{step}/{totalSteps}: Ingesting {unprocessedFileCount} unprocessed PDFs into a vector-store ({counter}/{unprocessedFileCount})");
-
                 PdfCleanUp result = response.Result;
                 await vectorStoreCollection.UpsertAsync(new VectorStoreRecord
                 {
@@ -124,8 +158,6 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
             }
             catch (Exception e)
             {
-                notifyProgress.Invoke($"{step}/{totalSteps}: Ingesting {unprocessedFileCount} unprocessed PDFs into a vector-store ({counter}/{unprocessedFileCount})");
-                counter++;
                 await vectorStoreCollection.UpsertAsync(new VectorStoreRecord
                 {
                     Id = pdfPath,
@@ -138,27 +170,19 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
         IEnumerable<string> deadIds = existingIds.Except(activeIds);
         await vectorStoreCollection.DeleteAsync(deadIds);
 
-        step++;
-        notifyProgress.Invoke($"{step}/{totalSteps}: Reading existing Records");
-        FinancialRecord[] fromBankEntries = FromBankEntries(entries, matchRules.ToArray());
-
-        step++;
-        notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records");
         int nextLineNum = account.Records.MaxBy(x => x.LineNum)?.LineNum ?? 0;
-        foreach (FinancialRecord newRecord in fromBankEntries.Reverse())
-        {
-            if (account.Records.Any(x => x.BankEntry == newRecord.BankEntry))
-            {
-                continue;
-            }
 
+        counter = 1;
+        foreach (AccountRecord newRecord in toProcess)
+        {
+            notifyProgress.Invoke($"- [{counter}/{toProcess.Count}] Processing new record 'Date: {newRecord.BankEntry.Date.ToString("dd. MMM")} Amount: {newRecord.BankEntry.Amount:N2} - Text: {newRecord.BankEntry.Text}'");
+            counter++;
             if (newRecord.MatchResults.Length == 1)
             {
                 //Good match
                 MatchResult matchResult = newRecord.MatchResults[0];
-                if (false && matchResult.NeedDividedCompanyMatch) //todo - add back in
+                if (matchResult.NeedDividedCompanyMatch) //todo - add back in
                 {
-                    notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Divided Company from {newRecord.BankEntry.Text})");
                     string description = newRecord.Description ?? string.Empty;
                     ChatClientAgentRunResponse<DividendCompanyResult> response = await dividendCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newRecord.BankEntry.Text);
                     string yieldCompany = response.Result.CompanyName;
@@ -166,10 +190,9 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
                     newRecord.Description = description;
                 }
 
-                if (false && matchResult.NeedAttachment)
+                if (matchResult.NeedAttachment)
                 {
                     List<VectorStoreRecord> vectorStoreSearchResult = [];
-                    notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Finding Related PDF to {newRecord.BankEntry.Text})");
                     string query = newRecord.ToString();
                     await foreach (VectorSearchResult<VectorStoreRecord> result in vectorStoreCollection.SearchAsync(query, 12, new VectorSearchOptions<VectorStoreRecord>
                                    {
@@ -193,7 +216,7 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
 
                     if (string.IsNullOrWhiteSpace(newRecord.Description) && bestMatch != null)
                     {
-                        notifyProgress.Invoke($"{step}/{totalSteps}: Processing {fromBankEntries.Length} potentially new records (Determine what was purchased from {newRecord.Company})");
+                        notifyProgress.Invoke($"-- Determine what was purchased from {newRecord.Company})");
                         ChatClientAgentRunResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + bestMatch.Content);
                         newRecord.Description = response.Result.ProductPurchased;
                         if (string.IsNullOrWhiteSpace(newRecord.Category))
@@ -209,15 +232,35 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
             nextLineNum++;
         }
 
-        step++;
-        notifyProgress.Invoke($"{step}/{totalSteps}: Merge...");
-
         return newRecords;
     }
 
-    private FinancialRecord[] FromBankEntries(BankEntry[] bankEntries, MatchRule[] matchRules)
+    public BankEntry[] ReadBankEntries(string content, Account account)
     {
-        List<FinancialRecord> result = [];
+        List<BankEntry> result = [];
+        string[] lines = content.Split('\n');
+        foreach (string line in lines.Skip(1))
+        {
+            string[] parts = line.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            DateOnly date = DateOnly.ParseExact(parts[0], "yyyy/MM/dd");
+            decimal amount = decimal.Parse(parts[1], new NumberFormatInfo
+            {
+                NumberDecimalSeparator = ","
+            });
+            string text = parts[3];
+            decimal balance = decimal.Parse(parts[4], new NumberFormatInfo
+            {
+                NumberDecimalSeparator = ","
+            });
+            result.Add(new BankEntry(date, text, amount, balance));
+        }
+
+        return result.ToArray();
+    }
+
+    private AccountRecord[] FromBankEntries(BankEntry[] bankEntries, MatchRule[] matchRules)
+    {
+        List<AccountRecord> result = [];
         foreach (BankEntry bankEntry in bankEntries)
         {
             MatchResult[] matchResults = matchRules.Where(x => x.Match(bankEntry) != null).Select(x => x.Match(bankEntry)!).ToArray();
@@ -225,10 +268,10 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
             {
                 case 1:
                     MatchResult match = matchResults[0];
-                    result.Add(new FinancialRecord(bankEntry, matchResults, match.Company, match.Description, match.Category, false));
+                    result.Add(new AccountRecord(bankEntry, matchResults, match.Company, match.Description, match.Category, false));
                     break;
                 default:
-                    result.Add(new FinancialRecord(bankEntry, matchResults, null, null, null, false));
+                    result.Add(new AccountRecord(bankEntry, matchResults, null, null, null, false));
                     break;
             }
         }
@@ -258,60 +301,62 @@ public class FinancialRecordQuery(AzureOpenAIAgentFactory agentFactory, BankCont
         [Description("Choose among the following categories ['It Udstyr','Kontorudstyr', or 'Services']")] //todo: make this part of instructions instead and from a configurable source
         public required string Category { get; set; }
     }
-}
 
-public class PdfCleanUp
-{
-    public string? Issuer { get; set; }
-    public DateTime? Date { get; set; }
-    public int Month { get; set; }
-    public decimal? Amount { get; set; }
-    public string? Currency { get; set; }
-
-    public string ToString(string rawData)
-    {
-        StringBuilder builder = new();
-        builder.AppendLine("<PdfContent>");
-        builder.AppendLine($"<Issuer>{Issuer ?? "???"}</Issuer>");
-        builder.AppendLine($"<Date>{Date?.ToString("yyyyMMdd") ?? "???"}</Date>");
-        builder.AppendLine($"<Month>{Month}</Date>");
-        builder.AppendLine($"<Amount>{Amount?.ToString(CultureInfo.InvariantCulture) ?? "???"} {Currency}</Amount>");
-        builder.AppendLine($"<RawData>{rawData}</RawData>");
-        builder.AppendLine("</PdfContent>");
-
-        return builder.ToString();
-    }
-}
-
-public class VectorStoreRecord
-{
-    [VectorStoreKey]
-    public required string Id { get; set; }
-
-    [VectorStoreData]
-    public string? Issuer { get; set; }
-
-    [VectorStoreData]
-    public string? Date { get; set; }
-
-    [VectorStoreData]
-    public int Month { get; set; }
-
-    [VectorStoreData]
-    public int? Amount { get; set; }
-
-    [VectorStoreData]
-    public required string Content { get; set; }
-
-    [VectorStoreData]
-    public required string FileName { get; set; }
-
-    [VectorStoreVector(1536)]
     [UsedImplicitly]
-    public string Vector => Content;
-
-    public override string ToString()
+    private class PdfCleanUp
     {
-        return $"<pdf filename=\"{FileName}\">{Content}</pdf>";
+        public string? Issuer { get; set; }
+        public DateTime? Date { get; set; }
+        public int Month { get; set; }
+        public decimal? Amount { get; set; }
+        public string? Currency { get; set; }
+
+        public string ToString(string rawData)
+        {
+            StringBuilder builder = new();
+            builder.AppendLine("<PdfContent>");
+            builder.AppendLine($"<Issuer>{Issuer ?? "???"}</Issuer>");
+            builder.AppendLine($"<Date>{Date?.ToString("yyyyMMdd") ?? "???"}</Date>");
+            builder.AppendLine($"<Month>{Month}</Date>");
+            builder.AppendLine($"<Amount>{Amount?.ToString(CultureInfo.InvariantCulture) ?? "???"} {Currency}</Amount>");
+            builder.AppendLine($"<RawData>{rawData}</RawData>");
+            builder.AppendLine("</PdfContent>");
+
+            return builder.ToString();
+        }
+    }
+
+    [UsedImplicitly]
+    private class VectorStoreRecord
+    {
+        [VectorStoreKey]
+        public required string Id { get; set; }
+
+        [VectorStoreData]
+        public string? Issuer { get; set; }
+
+        [VectorStoreData]
+        public string? Date { get; set; }
+
+        [VectorStoreData]
+        public int Month { get; set; }
+
+        [VectorStoreData]
+        public int? Amount { get; set; }
+
+        [VectorStoreData]
+        public required string Content { get; set; }
+
+        [VectorStoreData]
+        public required string FileName { get; set; }
+
+        [VectorStoreVector(1536)]
+        [UsedImplicitly]
+        public string Vector => Content;
+
+        public override string ToString()
+        {
+            return $"<pdf filename=\"{FileName}\">{Content}</pdf>";
+        }
     }
 }

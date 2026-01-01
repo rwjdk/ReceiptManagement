@@ -2,6 +2,10 @@
     font-size: 11px !important;
 }
 
+.selectedRow {
+    background-color: khaki;
+}
+
 .align-end {
     text-align: end;
 }

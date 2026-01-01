@@ -1,116 +1,33 @@
 ﻿using JetBrains.Annotations;
 using Logic;
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using MudBlazor;
 using System.Text;
-using AgentFrameworkToolkit.AzureOpenAI;
+using Logic.Models;
 using Microsoft.AspNetCore.Components;
 
 namespace BlazorApp.Components.Pages;
 
 [UsedImplicitly]
 public partial class Home(
-    FinancialRecordQuery financialRecordQuery,
-    AccountCommand accountCommand,
-    AccountQuery accountQuery,
-    AzureOpenAIEmbeddingFactory embeddingFactory,
-    ConfigurationQuery configurationQuery)
+    IConfiguration configuration,
+    AccountController accountController,
+    ISnackbar snackBar,
+    YearController yearController)
 {
-    private const string root = Paths.RootDataFolder;
-    private FinancialRecord? _selectedRecord;
-    private string _loadingStatus = string.Empty;
+    private string _rootFolder = null!;
+    private readonly List<YearFolder> _years = [];
+    private YearFolder? _selectedYear;
     private Account? _selectedAccount;
-    private List<Account> _accounts = [];
-    private SqliteCollection<string, VectorStoreRecord>? _vectorStoreCollection;
+    private AccountRecord? _selectedRecord;
+    private string[] _categories = [];
+    private bool _loading;
+    private MarkupString _loadingStatus;
+    private bool _showConfirmed = true;
+    private string[] _unprocessedPdfs = [];
+    private MatchRule[] _matchRules = [];
 
-    private List<MatchRule> matchRules =
-    [
-        new("Danløn Lønservice",
-            MatchRuleType.TextRegExAndAmountRange, -31.25M, -31.25M, ["^Overførsel ID"], "Danløn", "Lønservice (<MONTH>)", "Lønninger", true),
-
-        new("Danløn Egen Løn",
-            MatchRuleType.TextRegEx, 0, 0, ["^Lønoverførsel ID"], "Danløn", "Egen Løn (<MONTH>)", "Lønninger", false),
-
-        new("Danløn Egen Løn Skat",
-            MatchRuleType.TextRegExAndAmountRange, -12_500, -10_000, ["^Info-overførsel"], "Danløn", "Egen Løn Skat (<MONTH>)", "Lønninger", false),
-
-        new("Danløn Egen Løn Pension",
-            MatchRuleType.TextRegExAndAmountRange, -6_000, -5_000, ["^Info-overførsel"], "Danløn", "Egen Løn Pension (<MONTH>)", "Lønninger", false),
-
-        new("Udbytte fra Aktier",
-            MatchRuleType.TextRegEx, 0, 0, ["^Udbytte"], "Nordea", "Udbytte (<COMPANY>)", "Investeringer", false, true),
-
-        new("Telenor",
-            MatchRuleType.TextRegEx, 0, 0, ["^Telenor.dk"], "Telenor", "Telefon (<MONTH>)", "Services", true),
-
-        new("Microsoft Azure",
-            MatchRuleType.TextRegEx, 0, 0, ["^MicrosoftG", "^Microsoft-G", "^MICROSOFTÆG"], "Microsoft", "Azure Subscription (<MONTH>)", "Services", true),
-
-        new("Microsoft Office",
-            MatchRuleType.TextRegEx, 0, 0, ["^MICROSOFT\\*MICROSOFT"], "Microsoft", "Office 365 Subscription", "Services", true),
-
-        new("FastSpeed",
-            MatchRuleType.TextRegEx, 0, 0, ["^fastspeed.dk"], "FastSpeed", "Internet (<QUARTER>)", "Services", true),
-
-        new("Private Banking Gebyr",
-            MatchRuleType.TextRegEx, 0, 0, ["^Gebyr af depot"], "Nordea", "Private Banking Gebyr (<QUARTER>)", "Investeringer", false),
-
-        new("Google Cloud",
-            MatchRuleType.TextRegEx, 0, 0, ["^GOOGLE\\*CLOUD", "^GOOGLE CLOUD"], "Google", "Google Cloud Platform (AI <MONTH>)", "Services", true),
-
-        new("Nordea Gebyrer",
-            MatchRuleType.TextRegEx, 0, 0, ["^Gebyr, overf"], "Nordea", "Gebyrer", "Gebyrer", false),
-
-        new("Nordea Egen Salg af Aktier",
-            MatchRuleType.TextRegEx, 0, 0, ["^Fonds 20", "^Salg af aktier 20", "^Salg investbev 20"], "Nordea", null, "Investeringer", false),
-
-        new("OpenAI",
-            MatchRuleType.TextRegEx, 0, 0, ["^OPENAI"], "OpenAI", "AI Services", "Services", true),
-
-        new("ANTHROPIC",
-            MatchRuleType.TextRegEx, 0, 0, ["^ANTHROPIC"], "ANTHROPIC", "AI Services", "Services", true),
-
-        new("XAI",
-            MatchRuleType.TextRegEx, 0, 0, ["^XAI LLC"], "XAI", "AI Services", "Services", true),
-
-        new("Samplet Betaling",
-            MatchRuleType.TextRegEx, 0, 0, ["^Bs betaling ATP - SAMLET BETALIN"], "Sample Betaling", "Samlet Betaling", "Services", false),
-
-        new("Amazon",
-            MatchRuleType.TextRegEx, 0, 0, ["^AMAZON"], "Amazon", null, null, true),
-
-        new("APPLE",
-            MatchRuleType.TextRegEx, 0, 0, ["^APPLE"], "Apple", null, null, true),
-
-        new("JetBrains",
-            MatchRuleType.TextRegEx, 0, 0, ["^JetBrains"], "JetBrains", "Resharper Ultimate Subscription", "Services", true),
-
-        new("LastPass",
-            MatchRuleType.TextRegEx, 0, 0, ["^LASTPASS"], "LastPass", "Password Service", "Services", true),
-
-        new("UBISECURE",
-            MatchRuleType.TextRegEx, 0, 0, ["^UBISECURE"], "Ubisecure Oy", "Fornyelse af LEI", "Services", true),
-
-        new("PORKBUN",
-            MatchRuleType.TextRegEx, 0, 0, ["^PORKBUN.COM"], "Porkbun", "Domæne-fornyelse", "Services", true),
-
-        new("proshop.dk",
-            MatchRuleType.TextRegEx, 0, 0, ["^proshop.dk"], "Proshop", null, "IT Udstyr", true),
-
-        new("Private banking aft.",
-            MatchRuleType.TextRegEx, 0, 0, ["^Private banking aft.", "^Salg investbev", "^Køb investbev"], "Nordea", "Private Banking Gebyr", "Investeringer", false),
-
-        new("Renter",
-            MatchRuleType.TextRegEx, 0, 0, ["^Renter"], "Nordea", "Renter", "Renter", false),
-    ];
-
-    private string[] _categories = ["Gebyrer", "Indkomst", "Investeringer", "IT Udstyr", "Kontorudstyr", "Lønninger", "Services", "Sponsorat", "Skat", "Udbytte", "Renter"];
-    private bool _onlyUnconfirmed;
-    private Configuration? _configuration;
-    private decimal _openingBalance;
-
-    public IEnumerable<FinancialRecord> LinesToShow
+    public IEnumerable<AccountRecord> LinesToShow
     {
         get
         {
@@ -119,84 +36,90 @@ public partial class Home(
                 return [];
             }
 
-            return _onlyUnconfirmed ? _selectedAccount.Records.Where(x => !x.Confirmed).OrderByDescending(x => x.LineNum) : _selectedAccount.Records.OrderByDescending(x => x.LineNum);
+            return _showConfirmed ? _selectedAccount.Records.OrderByDescending(x => x.LineNum) : _selectedAccount.Records.Where(x => !x.Confirmed).OrderByDescending(x => x.LineNum);
         }
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        _configuration = configurationQuery.GetConfiguration(Paths.RootDataFolder);
-        SqliteVectorStore vectorStore = new SqliteVectorStore("Data Source=" + Paths.RootDataFolder + "\\vector-store.db", new SqliteVectorStoreOptions
-        {
-            EmbeddingGenerator = embeddingFactory.GetEmbeddingGenerator("text-embedding-3-small")
-        });
-
-        _vectorStoreCollection = vectorStore.GetCollection<string, VectorStoreRecord>("Data");
-        await _vectorStoreCollection.EnsureCollectionExistsAsync();
-
-        RefreshAccounts();
+        _rootFolder = configuration["RootFolder"]!;
+        _categories = configuration.GetSection("Categories").Get<string[]>() ?? [];
+        _matchRules = configuration.GetSection("MatchRules").Get<MatchRule[]>() ?? [];
+        InitializeYears();
     }
 
-    private void RefreshAccounts()
+    private void InitializeYears()
     {
-        if (_configuration == null)
+        string[] accountNames = configuration.GetSection("AccountNames").Get<string[]>() ?? [];
+        int currentYear = DateTime.Today.Year;
+        string currentFolder = Path.Combine(_rootFolder, currentYear.ToString());
+        if (!Directory.Exists(currentFolder))
         {
-            return;
+            Directory.CreateDirectory(currentFolder);
         }
 
-        _accounts = accountQuery.GetAccounts(root);
-        int year = DateTime.Today.Year;
-        foreach (string neededAccountName in _configuration.NeededAccountNames)
+        for (int year = 2000; year < currentYear + 1; year++)
         {
-            Account? existingAccount = _accounts.FirstOrDefault(x => x.Name == neededAccountName && x.Year == year);
-            if (existingAccount == null)
+            string yearFolder = Path.Combine(_rootFolder, year.ToString());
+            if (Directory.Exists(yearFolder))
             {
-                //Create the account and Year
-                _accounts.Add(accountCommand.CreateAccount(root, year, neededAccountName));
+                string dataFilePath = Path.Combine(yearFolder, "Data.json");
+
+                Data data = yearController.GetOrCreate(dataFilePath, accountNames);
+                YearFolder folder = new(year, yearFolder, data);
+                Directory.CreateDirectory(folder.UnprocessedReceiptsFolder);
+                Directory.CreateDirectory(folder.ProcessedReceiptsFolder);
+                if (folder.Year == currentYear)
+                {
+                    _selectedYear = folder;
+                    _selectedAccount = _selectedYear.Data.Accounts.FirstOrDefault();
+                }
+
+                _years.Add(folder);
             }
         }
-
-        _selectedAccount = _accounts.OrderBy(x => x.DisplayName).FirstOrDefault(x => x.Year == year);
     }
 
     private void NotifyProgress(string obj)
     {
-        _loadingStatus = obj;
+        _loadingStatus = new MarkupString($"{_loadingStatus.Value}<br/>{obj}");
         StateHasChanged();
     }
 
-    private void SelectRow(DataGridRowClickEventArgs<FinancialRecord> arg)
+    private void SelectRow(DataGridRowClickEventArgs<AccountRecord> arg)
     {
         _selectedRecord = arg.Item;
     }
 
-    private void ChangeAccount(Account account)
-    {
-        _selectedAccount = account;
-    }
-
     private async Task UploadFile(IBrowserFile? file)
     {
-        if (_selectedAccount == null || file == null)
+        if (_selectedAccount == null || file == null || _selectedYear == null)
         {
             return;
         }
 
-        //todo - need a busy state system that disable buttons while data is loading
-        await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-        using StreamReader reader = new(stream, Encoding.UTF8);
-        string bankFileContent = await reader.ReadToEndAsync();
+        try
+        {
+            _loading = true;
+            await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using StreamReader reader = new(stream, Encoding.UTF8);
+            string bankFileContent = await reader.ReadToEndAsync();
 
-        List<FinancialRecord> newRecords = await financialRecordQuery.GetNewRecords(NotifyProgress, _vectorStoreCollection!, matchRules, bankFileContent, Paths.PathToUnprocessedPdfs, _selectedAccount);
-        //todo - inform how many new records
-        _selectedAccount.Records.AddRange(newRecords);
-        _loadingStatus = string.Empty;
-        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+            List<AccountRecord> newRecords = await accountController.GetNewRecords(_selectedYear.Year, NotifyProgress, _matchRules, bankFileContent, _selectedYear.UnprocessedReceiptsFolder, _selectedAccount);
+            snackBar.Add($"{newRecords.Count} new records imported", Severity.Success);
+            _selectedAccount.Records.AddRange(newRecords);
+            yearController.Update(_selectedYear);
+        }
+        finally
+        {
+            _loadingStatus = new MarkupString();
+            _loading = false;
+        }
     }
 
-    private void UpdateRecord(FinancialRecord record)
+    private void UpdateRecord(AccountRecord record)
     {
-        if (_selectedAccount == null)
+        if (_selectedAccount == null || _selectedYear == null)
         {
             return;
         }
@@ -206,12 +129,12 @@ public partial class Home(
             record.Confirmed = false;
         }
 
-        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+        yearController.Update(_selectedYear);
     }
 
-    private void Confirm(FinancialRecord record)
+    private void Confirm(AccountRecord record)
     {
-        if (_selectedAccount == null)
+        if (_selectedAccount == null || _selectedYear == null)
         {
             return;
         }
@@ -225,8 +148,8 @@ public partial class Home(
             {
                 //Rename attachment and move to confirmed Attachments
                 string newAttachmentName = record.Company + " - " + record.Description + Path.GetExtension(record.Attachment);
-                string source = Path.Combine(Paths.PathToUnprocessedPdfs, record.Attachment);
-                string target = Path.Combine(Paths.PathToProcessedPdfs, newAttachmentName);
+                string source = Path.Combine(_selectedYear.UnprocessedReceiptsFolder, record.Attachment);
+                string target = Path.Combine(_selectedYear.ProcessedReceiptsFolder, newAttachmentName);
                 File.Move(source, target);
                 record.Attachment = newAttachmentName;
             }
@@ -237,34 +160,68 @@ public partial class Home(
             if (!string.IsNullOrWhiteSpace(record.Attachment))
             {
                 //Move to confirmed Attachment back to un-confirmed (but leave name)
-                string source = Path.Combine(Paths.PathToProcessedPdfs, record.Attachment);
-                string target = Path.Combine(Paths.PathToUnprocessedPdfs, record.Attachment);
+                string source = Path.Combine(_selectedYear.ProcessedReceiptsFolder, record.Attachment);
+                string target = Path.Combine(_selectedYear.UnprocessedReceiptsFolder, record.Attachment);
                 File.Move(source, target);
             }
         }
 
-        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+        yearController.Update(_selectedYear);
     }
 
-    private void ChooseAttachment(IBrowserFile? file, FinancialRecord record)
+    private void ChooseAttachment(string file, AccountRecord record)
     {
-        if (file == null || _selectedAccount == null)
+        if (_selectedAccount == null || _selectedYear == null)
         {
             return;
         }
 
-        record.Attachment = file.Name;
-        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+        record.Attachment = Path.GetFileName(file);
+        yearController.Update(_selectedYear);
     }
 
-    private void RemoveAttachment(FinancialRecord record)
+    private void RemoveAttachment(AccountRecord record)
     {
-        if (_selectedAccount == null)
+        if (_selectedAccount == null || _selectedYear == null)
         {
             return;
         }
 
         record.Attachment = null;
-        accountCommand.UpdateAccount(Paths.RootDataFolder, _selectedAccount);
+        yearController.Update(_selectedYear);
+    }
+
+    private void GetUnprocessedPdfs()
+    {
+        if (_selectedYear == null)
+        {
+            return;
+        }
+
+        _unprocessedPdfs = Directory.GetFiles(_selectedYear.UnprocessedReceiptsFolder);
+    }
+
+    private string RowClassFunc(AccountRecord record, int line)
+    {
+        return record == _selectedRecord ? "selectedRow" : "";
+    }
+
+    private void ChooseYear(YearFolder yearFolder)
+    {
+        _selectedYear = yearFolder;
+        _selectedAccount = _selectedYear.Data.Accounts.FirstOrDefault();
+        StateHasChanged();
+    }
+
+    private async Task ReprocessRecord(AccountRecord accountRecord)
+    {
+        if (_selectedYear == null)
+        {
+            return;
+        }
+
+        //todo: Confirm?
+        await accountController.ReprocessRecord(accountRecord, _matchRules);
+        yearController.Update(_selectedYear);
     }
 }

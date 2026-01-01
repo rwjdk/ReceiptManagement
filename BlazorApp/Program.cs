@@ -1,6 +1,7 @@
 using AgentFrameworkToolkit.AzureOpenAI;
 using BlazorApp;
 using Logic;
+using Microsoft.AspNetCore.Mvc;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,11 +15,8 @@ AzureOpenAIConnection connection = new()
 builder.Services.AddMemoryCache();
 builder.Services.AddAzureOpenAIAgentFactory(connection);
 builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
-builder.Services.AddSingleton<BankContentQuery>();
-builder.Services.AddSingleton<AccountQuery>();
-builder.Services.AddSingleton<AccountCommand>();
-builder.Services.AddScoped<FinancialRecordQuery>();
-builder.Services.AddScoped<ConfigurationQuery>();
+builder.Services.AddScoped<AccountController>();
+builder.Services.AddScoped<YearController>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
@@ -32,19 +30,18 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.MapGet("/pdf/{fileName}", (string fileName) =>
+app.MapGet("/pdf", ([FromQuery] string filePath, [FromQuery] string unprocessedFolder, [FromQuery] string processedFolder) =>
 {
-    string filePath = Path.Combine(Paths.PathToUnprocessedPdfs, fileName);
-
-    if (File.Exists(filePath))
+    string path = Path.Combine(unprocessedFolder, filePath);
+    if (File.Exists(path))
     {
-        return Results.File(filePath, "application/pdf");
+        return Results.File(path, "application/pdf");
     }
 
-    filePath = Path.Combine(Paths.PathToProcessedPdfs, fileName);
-    if (File.Exists(filePath))
+    path = Path.Combine(processedFolder, filePath);
+    if (File.Exists(path))
     {
-        return Results.File(filePath, "application/pdf");
+        return Results.File(path, "application/pdf");
     }
 
     return Results.NotFound();
@@ -58,5 +55,4 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<BlazorApp.Components.App>()
     .AddInteractiveServerRenderMode();
-
 app.Run();

@@ -2,10 +2,10 @@
 using System.Globalization;
 using System.Text;
 
-namespace Logic;
+namespace Logic.Models;
 
 [DebuggerDisplay("{Company}: {Description}]")]
-public class FinancialRecord(
+public class AccountRecord(
     BankEntry bankEntry,
     MatchResult[] matchResults,
     string? company,
@@ -15,7 +15,7 @@ public class FinancialRecord(
 {
     public int LineNum { get; set; }
     public BankEntry BankEntry { get; } = bankEntry;
-    public MatchResult[] MatchResults { get; } = matchResults;
+    public MatchResult[] MatchResults { get; set; } = matchResults;
     public string? Company { get; set; } = company;
     public string? Description { get; set; } = description;
     public string? Category { get; set; } = category;
@@ -27,7 +27,7 @@ public class FinancialRecord(
     public override string ToString()
     {
         StringBuilder builder = new();
-        builder.AppendLine("<FinancialRecord>");
+        builder.AppendLine("<AccountRecord>");
         builder.AppendLine($"<Date>{BankEntry.Date.ToString("yyyyMMdd")}</Date");
         builder.AppendLine($"<Month{BankEntry.Date.Month}</Month");
         builder.AppendLine($"<Amount>{Math.Abs(BankEntry.Amount).ToString(CultureInfo.InvariantCulture)} DKK</Amount");
@@ -47,7 +47,7 @@ public class FinancialRecord(
             builder.AppendLine($"<Category>{Category}</Category");
         }
 
-        builder.AppendLine("</FinancialRecord>");
+        builder.AppendLine("</AccountRecord>");
 
         return builder.ToString();
     }
