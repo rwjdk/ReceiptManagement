@@ -23,7 +23,7 @@ public partial class Home(
     private string[] _categories = [];
     private bool _loading;
     private MarkupString _loadingStatus;
-    private bool _showConfirmed = true;
+    private bool _showConfirmed = false;
     private string[] _unprocessedPdfs = [];
     private MatchRule[] _matchRules = [];
 
@@ -36,7 +36,7 @@ public partial class Home(
                 return [];
             }
 
-            return _showConfirmed ? _selectedAccount.Records.OrderByDescending(x => x.LineNum) : _selectedAccount.Records.Where(x => !x.Confirmed).OrderByDescending(x => x.LineNum);
+            return _showConfirmed ? _selectedAccount.Records.OrderBy(x => x.LineNum) : _selectedAccount.Records.Where(x => !x.Confirmed).OrderBy(x => x.LineNum);
         }
     }
 
@@ -147,11 +147,25 @@ public partial class Home(
             if (!string.IsNullOrWhiteSpace(record.Attachment))
             {
                 //Rename attachment and move to confirmed Attachments
-                string newAttachmentName = record.Company + " - " + record.Description + Path.GetExtension(record.Attachment);
+                string newAttachmentName = $"V{record.BankEntry.Date.ToString("yyyyMMdd")}-{record.Company} - {record.Description}{Path.GetExtension(record.Attachment)}";
+                foreach (char invalidFileNameChar in Path.GetInvalidFileNameChars())
+                {
+                    newAttachmentName = newAttachmentName.Replace(invalidFileNameChar, '_');
+                }
+
                 string source = Path.Combine(_selectedYear.UnprocessedReceiptsFolder, record.Attachment);
                 string target = Path.Combine(_selectedYear.ProcessedReceiptsFolder, newAttachmentName);
-                File.Move(source, target);
-                record.Attachment = newAttachmentName;
+
+                if (File.Exists(source))
+                {
+                    File.Move(source, target);
+                    record.Attachment = newAttachmentName;
+                }
+                else
+                {
+                    snackBar.Add("Source File do not exist. Removing attachment link");
+                    record.Attachment = null;
+                }
             }
         }
         else
@@ -162,11 +176,24 @@ public partial class Home(
                 //Move to confirmed Attachment back to un-confirmed (but leave name)
                 string source = Path.Combine(_selectedYear.ProcessedReceiptsFolder, record.Attachment);
                 string target = Path.Combine(_selectedYear.UnprocessedReceiptsFolder, record.Attachment);
-                File.Move(source, target);
+
+                if (File.Exists(source))
+                {
+                    File.Move(source, target);
+                }
+                else
+                {
+                    snackBar.Add("Source File do not exist. Removing attachment link");
+                    record.Attachment = null;
+                }
             }
         }
 
         yearController.Update(_selectedYear);
+        if (!_showConfirmed)
+        {
+            _selectedRecord = LinesToShow.FirstOrDefault(x => !x.Confirmed);
+        }
     }
 
     private void ChooseAttachment(string file, AccountRecord record)
@@ -198,7 +225,7 @@ public partial class Home(
             return;
         }
 
-        _unprocessedPdfs = Directory.GetFiles(_selectedYear.UnprocessedReceiptsFolder);
+        _unprocessedPdfs = Directory.GetFiles(_selectedYear.UnprocessedReceiptsFolder, "*.pdf");
     }
 
     private string RowClassFunc(AccountRecord record, int line)
@@ -220,8 +247,16 @@ public partial class Home(
             return;
         }
 
-        //todo: Confirm?
-        await accountController.ReprocessRecord(accountRecord, _matchRules);
-        yearController.Update(_selectedYear);
+        try
+        {
+            _loading = true;
+            await accountController.ReprocessRecord(NotifyProgress, accountRecord, _matchRules, _selectedYear);
+            yearController.Update(_selectedYear);
+        }
+        finally
+        {
+            _loadingStatus = new MarkupString();
+            _loading = false;
+        }
     }
 }

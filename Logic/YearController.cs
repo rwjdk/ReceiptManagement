@@ -38,6 +38,27 @@ public class YearController
     {
         CreateBackup(year.DataPath);
         File.WriteAllText(year.DataPath, JsonSerializer.Serialize(year.Data), Encoding.UTF8);
+
+        foreach (Account account in year.Data.Accounts)
+        {
+            //Create Final CSV-Files
+            StringBuilder csvBuilder = new();
+            csvBuilder.AppendLine("Dato;Tekst;Beløb;Firma;Beskrivelse;Kategori;Bilag;Balance");
+            foreach (AccountRecord record in account.Records.OrderBy(x => x.LineNum))
+            {
+                csvBuilder.AppendLine($"{record.BankEntry.Date.ToString("dd-MM-yyyy")};" +
+                                      $"\"{record.BankEntry.Text.Replace("\"", "\"\"")}\";" +
+                                      $"{record.BankEntry.Amount:N2};" +
+                                      $"\"{record.Company?.Replace("\"", "\"\"")}\";" +
+                                      $"\"{record.Description?.Replace("\"", "\"\"")}\";" +
+                                      $"\"{record.Category?.Replace("\"", "\"\"")}\";" +
+                                      $"\"{record.Attachment?.Replace("\"", "\"\"") ?? ""}\";" +
+                                      $"{record.BankEntry.Balance:N2}"
+                );
+            }
+
+            File.WriteAllText(Path.Combine(year.FolderPath, account.Name + ".csv"), csvBuilder.ToString(), Encoding.UTF8);
+        }
     }
 
     private static void CreateBackup(string path)

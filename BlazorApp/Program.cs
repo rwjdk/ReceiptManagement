@@ -17,6 +17,7 @@ builder.Services.AddAzureOpenAIAgentFactory(connection);
 builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
 builder.Services.AddScoped<AccountController>();
 builder.Services.AddScoped<YearController>();
+builder.Services.AddScoped<VectorStoreController>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
