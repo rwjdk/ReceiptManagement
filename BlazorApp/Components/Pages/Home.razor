@@ -30,7 +30,7 @@
         @if (_selectedAccount != null)
         {
             <MudDataGrid Dense
-                         Height="90vh"
+                         Height="93vh"
                          T="AccountRecord"
                          Items="@LinesToShow"
                          RowClick="SelectRow"
@@ -158,7 +158,7 @@
         }
     </MudItem>
 
-    <MudItem xs="4" Style="height: 93vh; background-color: silver">
+    <MudItem xs="4" Style="height: 96vh;">
         @if (_loading)
         {
             <div style="height: 90vh; padding: 10px; overflow-y: scroll">
@@ -177,7 +177,7 @@
             }
             else
             {
-                <div style="text-align: center; margin-top: 100px">Select record with attachment</div>
+                <div style="font-style: italic; color: silver; text-align: center; margin-top: 60px">Progress / Attachments are shown here</div>
             }
         }
     </MudItem>
