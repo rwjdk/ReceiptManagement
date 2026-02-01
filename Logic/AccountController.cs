@@ -20,17 +20,28 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         await Task.CompletedTask;
         AccountRecord record = FromBankEntries([accountRecord.BankEntry], matchRules)[0];
-        accountRecord.Company = record.Company;
-        accountRecord.Description = record.Description;
-        accountRecord.Category = record.Category;
+        if (!string.IsNullOrWhiteSpace(record.Company))
+        {
+            accountRecord.Company = record.Company;
+        }
+
+        if (!string.IsNullOrWhiteSpace(record.Description))
+        {
+            accountRecord.Description = record.Description;
+        }
+
+        if (!string.IsNullOrWhiteSpace(record.Category))
+        {
+            accountRecord.Category = record.Category;
+        }
         accountRecord.MatchResults = record.MatchResults;
         await vectorStoreController.SyncVectorStoreAsync(notifyProgress, yearFolder.Year, yearFolder.UnprocessedReceiptsFolder);
         if (accountRecord.MatchResults.Length == 1)
         {
             MatchResult matchResult = accountRecord.MatchResults[0];
             await ProcessDividedCompanyMatch(matchResult, accountRecord, GetDividendCompanyAgent());
-            await ProcessAttachmentMatch(yearFolder.Year, notifyProgress, matchResult, accountRecord, GetInvoiceDetailsAgent());
         }
+        await ProcessAttachmentMatch(yearFolder.Year, notifyProgress, null, accountRecord, GetInvoiceDetailsAgent());
     }
 
     public async Task<List<AccountRecord>> GetNewRecords(
@@ -101,9 +112,9 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
         });
     }
 
-    private async Task ProcessAttachmentMatch(int year, Action<string> notifyProgress, MatchResult matchResult, AccountRecord newRecord, AzureOpenAIAgent invoiceDetailsAgent)
+    private async Task ProcessAttachmentMatch(int year, Action<string> notifyProgress, MatchResult? matchResult, AccountRecord newRecord, AzureOpenAIAgent invoiceDetailsAgent)
     {
-        if (matchResult.NeedAttachment)
+        if (matchResult == null || matchResult.NeedAttachment)
         {
             string query = newRecord.ToString();
             List<VectorStoreRecord> vectorStoreSearchResult = await vectorStoreController.Search(year, query);
@@ -113,7 +124,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
                 searchResult.AppendLine(record.ToString());
             }
 
-            string whatFileOfThese = "What File of these: " + searchResult + $" is the best match for this record: {newRecord} (Issuer, Amount (Might be different currency so adjust) and Month/Approximate Date is the best match-conditions)";
+            string whatFileOfThese = "What File of these: " + searchResult + $" is the best match for this record: {newRecord} (Issuer, Amount (Might be different currency so adjust) and Month/Approximate Date is the best match-conditions). If nothing match then leave Filename null";
             ChatClientAgentRunResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
             VectorStoreRecord? bestMatch = vectorStoreSearchResult.FirstOrDefault(x => x.FileName.Equals(responseDocumentMatch.Result.FileName, StringComparison.CurrentCultureIgnoreCase));
 
@@ -209,7 +220,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     [UsedImplicitly]
     private class DocumentMatch
     {
-        public required string FileName { get; set; }
+        public required string? FileName { get; set; }
     }
 
     [UsedImplicitly]
