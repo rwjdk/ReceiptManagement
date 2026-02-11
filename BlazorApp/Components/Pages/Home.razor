@@ -3,184 +3,198 @@
 @using Logic.Models
 
 <PageTitle>Home</PageTitle>
-<MudGrid Spacing="1">
-    <MudItem xs="8">
 
-        <MudGrid Spacing="1" Style="align-items: center">
-            <MudItem>
-                <RSelect Disabled="_loading" T="YearFolder" Label="Year" Items="_years" Value="_selectedYear" ValueChanged="ChooseYear" ToStringFunc="folder => folder.Year.ToString()" />
-            </MudItem>
-            @if (_selectedYear != null)
+@if (_testMode)
+{
+    <MudAlert Severity="Severity.Warning">CURRENTLY, IN TEST MODE</MudAlert>
+
+}
+
+@if (_initialized)
+{
+    <MudGrid Spacing="1">
+        <MudItem xs="8">
+            <MudGrid Spacing="1" Style="align-items: center">
+                <MudItem>
+                    <RSelect Disabled="_loading" T="YearFolder" Label="Year" Items="_years" Value="_selectedYear" ValueChanged="ChooseYear" ToStringFunc="folder => folder.Year.ToString()"/>
+                </MudItem>
+                @if (_selectedYear != null)
+                {
+                    <MudItem Style="width: 700px">
+                        <RSelect Disabled="_loading" T="Account" Label="Account" Items="_selectedYear.Data.Accounts.OrderBy(x => x.DisplayName)" @bind-Value="_selectedAccount" ToStringFunc="@(account => $"{account.DisplayName} - {account.RecordsDisplayName}")"/>
+                    </MudItem>
+                    <MudItem>
+                        <MudFileUpload Disabled="_loading" T="IBrowserFile" Accept=".csv" FilesChanged="UploadFile" MaximumFileCount="1">
+                            <ActivatorContent>
+                                <RIconButton Icon="@Icons.Material.Filled.UploadFile"/>
+                            </ActivatorContent>
+                        </MudFileUpload>
+                    </MudItem>
+                    <MudItem>
+                        <RCheckBox Disabled="_loading" Label="Show Confirmed" @bind-Value="_showConfirmed"/>
+                    </MudItem>
+                }
+            </MudGrid>
+            @if (_selectedAccount != null)
             {
-                <MudItem Style="width: 700px">
-                    <RSelect Disabled="_loading" T="Account" Label="Account" Items="_selectedYear.Data.Accounts.OrderBy(x => x.DisplayName)" @bind-Value="_selectedAccount" ToStringFunc="@(account => $"{account.DisplayName} - {account.RecordsDisplayName}")" />
-                </MudItem>
-                <MudItem>
-                    <MudFileUpload Disabled="_loading" T="IBrowserFile" Accept=".csv" FilesChanged="UploadFile" MaximumFileCount="1">
-                        <ActivatorContent>
-                            <RIconButton Icon="@Icons.Material.Filled.UploadFile" />
-                        </ActivatorContent>
-                    </MudFileUpload>
-                </MudItem>
-                <MudItem>
-                    <RCheckBox Disabled="_loading" Label="Show Confirmed" @bind-Value="_showConfirmed" />
-                </MudItem>
-            }
-        </MudGrid>
-        @if (_selectedAccount != null)
-        {
-            <MudDataGrid Dense
-                         Height="93vh"
-                         T="AccountRecord"
-                         Items="@LinesToShow"
-                         RowClick="SelectRow"
-                         RowClassFunc="RowClassFunc"
-                         SelectOnRowClick="true"
-                         ReadOnly="@_loading"
-                         EditMode="DataGridEditMode.Cell"
-                         SortMode="SortMode.None"
-                         Filterable="false"
-                         Groupable
-                         GroupExpanded="true"
-                         ColumnResizeMode="ResizeMode.Column"
-                         CommittedItemChanges="record => UpdateRecord(record)">
-                <GroupTemplate>
-                    @{
-                        string month = new DateTime(2000, Convert.ToInt32(context.Grouping.Key), 1).ToString("MMMM");
-                    }
-                    <span style="font-weight:bold">
-                        <MudGrid>
-                            <MudItem>
-                                @month[0].ToString().ToUpperInvariant()@month[1..]
-                            </MudItem>
-                            <MudSpacer />
-                            <MudItem>
-                                <div style="text-align: end">
-                                    @context.Grouping.Count() Records (@LinesToShow.Where(x=> x.BankEntry.Date.Month == Convert.ToInt32(context.Grouping.Key)).Sum(x=> x.BankEntry.Amount).ToString("N2") DKK)
-                                </div>
-
-                            </MudItem>
-                        </MudGrid>
-                    </span>
-                </GroupTemplate>
-                <Columns>
-                    <PropertyColumn Hidden Required="false" Editable="false" Property="x => x.BankEntry.Date.Month" Title="" Grouping />
-                    <TemplateColumn Title="" Editable="false" Class="f11" CellStyle="max-width: 200px">
-                        <CellTemplate>
-                            <MudGrid Style="align-items: center">
-                                <MudItem xs="1">
-                                    @if (context.Item.IsComplete)
-                                    {
-                                        @if (context.Item.Confirmed)
-                                        {
-                                            <RIconButton Disabled="@_loading" OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBox" Color="Color.Success" />
-                                        }
-                                        else
-                                        {
-                                            <RIconButton Disabled="@_loading" OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBoxOutlineBlank" />
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Error" ToolTip="Not all data is provided and attachments confirmed" />
-                                    }
+                <MudDataGrid Dense
+                             Height="93vh"
+                             T="AccountRecord"
+                             Items="@LinesToShow"
+                             RowClick="SelectRow"
+                             RowClassFunc="RowClassFunc"
+                             SelectOnRowClick="true"
+                             ReadOnly="@_loading"
+                             EditMode="DataGridEditMode.Cell"
+                             SortMode="SortMode.None"
+                             Filterable="false"
+                             Groupable
+                             GroupExpanded="true"
+                             ColumnResizeMode="ResizeMode.Column"
+                             CommittedItemChanges="record => UpdateRecord(record)">
+                    <GroupTemplate>
+                        @{
+                            string month = new DateTime(2000, Convert.ToInt32(context.Grouping.Key), 1).ToString("MMMM");
+                        }
+                        <span style="font-weight:bold">
+                            <MudGrid>
+                                <MudItem>
+                                    @month[0].ToString().ToUpperInvariant()@month[1..]
                                 </MudItem>
-                                <MudItem xs="11">
-                                    <MudGrid Spacing="0">
-                                        <MudItem xs="12" Class="f11">
-                                            <strong>@context.Item.BankEntry.Date.ToString("dd. MMMM yyyy")</strong>
-                                        </MudItem>
-                                        <MudItem xs="12" Class="f11">
-                                            <em>@context.Item.BankEntry.Text</em>
-                                        </MudItem>
-                                    </MudGrid>
+                                <MudSpacer/>
+                                <MudItem>
+                                    <div style="text-align: end">
+                                        @context.Grouping.Count() Records (@LinesToShow.Where(x => x.BankEntry.Date.Month == Convert.ToInt32(context.Grouping.Key)).Sum(x => x.BankEntry.Amount).ToString("N2") DKK)
+                                    </div>
+
                                 </MudItem>
                             </MudGrid>
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Editable="false" Title="Amount" CellClass="f11" CellStyle="width:50px">
-                        <CellTemplate>
-                            <div style="@($"color : {(context.Item.BankEntry.Amount > 0 ? "green" : "red")}")" class="align-end">
-                                @context.Item.BankEntry.Amount.ToString("N2")
-                            </div>
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <PropertyColumn Required="false" Editable="true" Property="x => x.Company" Title="Company" CellClass="f11" CellStyle="width:50px" />
-                    <PropertyColumn Required="false" Editable="true" Property="x => x.Description" Title="Description" CellClass="f11" />
-                    <TemplateColumn Editable="true" Title="Category" CellClass="f11" CellStyle="width:50px">
-                        <EditTemplate>
-                            <RSelect @bind-Value="@context.Item.Category" Items="_categories.OrderBy(x => x)" />
-                        </EditTemplate>
-                        <CellTemplate>
-                            @context.Item.Category
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Editable="false" Title="Att" CellClass="f11" CellStyle="width:50px">
-                        <CellTemplate>
-                            <MudGrid>
-                                <MudItem xs="1">
-                                    <MudMenu Dense OpenChanged="GetUnprocessedPdfs">
-                                        <ActivatorContent>
-                                            @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                        </span>
+                    </GroupTemplate>
+                    <Columns>
+                        <PropertyColumn Hidden Required="false" Editable="false" Property="x => x.BankEntry.Date.Month" Title="" Grouping/>
+                        <TemplateColumn Title="" Editable="false" Class="f11" CellStyle="max-width: 200px">
+                            <CellTemplate>
+                                <MudGrid Style="align-items: center">
+                                    <MudItem xs="1">
+                                        @if (context.Item.IsComplete)
+                                        {
+                                            @if (context.Item.Confirmed)
                                             {
-                                                <RIconButton Disabled="context.Item.Confirmed" Size="Size.Small" Icon="@Icons.Material.Filled.InsertLink" />
+                                                <RIconButton Disabled="@_loading" OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBox" Color="Color.Success"/>
                                             }
                                             else
                                             {
-                                                <RIconButton Disabled="context.Item.Confirmed" Icon="@Icons.Material.Filled.Add" />
+                                                <RIconButton Disabled="@_loading" OnClick="() => Confirm(context.Item)" Icon="@Icons.Material.Filled.CheckBoxOutlineBlank"/>
                                             }
-                                        </ActivatorContent>
-                                        <ChildContent>
-                                            @foreach (string file in _unprocessedPdfs)
-                                            {
-                                                <MudMenuItem OnClick="() => ChooseAttachment(file, context.Item)" Class="f11">@file</MudMenuItem>
-                                            }
-                                        </ChildContent>
-                                    </MudMenu>
-                                </MudItem>
-                                <MudItem xs="1">
-                                    @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
-                                    {
-                                        <RIconButton Disabled="context.Item.Confirmed" ToolTip="Remove Attachment" Icon="@Icons.Material.Outlined.Delete" OnClick="() => RemoveAttachment(context.Item)" />
-                                    }
-                                </MudItem>
-                            </MudGrid>
-                        </CellTemplate>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Balance" Editable="false" CellClass="f11" CellStyle="width:150px">
-                        <CellTemplate>
-                            @context.Item.BankEntry.Balance.ToString("N2")
-                            <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Refresh" OnClick="() => ReprocessRecord(context.Item)" ToolTip="Reprocess Record" />
-                        </CellTemplate>
-                    </TemplateColumn>
-                </Columns>
-            </MudDataGrid>
-        }
-    </MudItem>
+                                        }
+                                        else
+                                        {
+                                            <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Error" ToolTip="Not all data is provided and attachments confirmed"/>
+                                        }
+                                    </MudItem>
+                                    <MudItem xs="11">
+                                        <MudGrid Spacing="0">
+                                            <MudItem xs="12" Class="f11">
+                                                <strong>@context.Item.BankEntry.Date.ToString("dd. MMMM yyyy")</strong>
+                                            </MudItem>
+                                            <MudItem xs="12" Class="f11">
+                                                <em>@context.Item.BankEntry.Text</em>
+                                            </MudItem>
+                                        </MudGrid>
+                                    </MudItem>
+                                </MudGrid>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Editable="false" Title="Amount" CellClass="f11" CellStyle="width:50px">
+                            <CellTemplate>
+                                <div style="@($"color : {(context.Item.BankEntry.Amount > 0 ? "green" : "red")}")" class="align-end">
+                                    @context.Item.BankEntry.Amount.ToString("N2")
+                                </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Required="false" Editable="true" Property="x => x.Company" Title="Company" CellClass="f11" CellStyle="width:50px"/>
+                        <PropertyColumn Required="false" Editable="true" Property="x => x.Description" Title="Description" CellClass="f11"/>
+                        <TemplateColumn Editable="true" Title="Category" CellClass="f11" CellStyle="width:50px">
+                            <EditTemplate>
+                                <RSelect @bind-Value="@context.Item.Category" Items="_categories.OrderBy(x => x)"/>
+                            </EditTemplate>
+                            <CellTemplate>
+                                @context.Item.Category
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Editable="false" Title="Att" CellClass="f11" CellStyle="width:50px">
+                            <CellTemplate>
+                                <MudGrid>
+                                    <MudItem xs="1">
+                                        <MudMenu Dense OpenChanged="GetUnprocessedPdfs">
+                                            <ActivatorContent>
+                                                @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                                {
+                                                    <RIconButton Disabled="context.Item.Confirmed" Size="Size.Small" Icon="@Icons.Material.Filled.InsertLink"/>
+                                                }
+                                                else
+                                                {
+                                                    <RIconButton Disabled="context.Item.Confirmed" Icon="@Icons.Material.Filled.Add"/>
+                                                }
+                                            </ActivatorContent>
+                                            <ChildContent>
+                                                @foreach (string file in _unprocessedPdfs)
+                                                {
+                                                    <MudMenuItem OnClick="() => ChooseAttachment(file, context.Item)" Class="f11">@file</MudMenuItem>
+                                                }
+                                            </ChildContent>
+                                        </MudMenu>
+                                    </MudItem>
+                                    <MudItem xs="1">
+                                        @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                        {
+                                            <RIconButton Disabled="context.Item.Confirmed" ToolTip="Remove Attachment" Icon="@Icons.Material.Outlined.Delete" OnClick="() => RemoveAttachment(context.Item)"/>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Balance" Editable="false" CellClass="f11" CellStyle="width:100px">
+                            <CellTemplate>
+                                @context.Item.BankEntry.Balance.ToString("N2")
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Editable="false" CellClass="f11" CellStyle="width:90px">
+                            <CellTemplate>
+                                <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Refresh" OnClick="() => ReprocessRecord(context.Item)" ToolTip="Reprocess Record" />
+                                <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteRecord(context.Item)" ToolTip="DeleteRecord" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            }
+        </MudItem>
 
-    <MudItem xs="4" Style="height: 96vh;">
-        @if (_loading)
-        {
-            <div style="height: 90vh; padding: 10px; overflow-y: scroll">
-                <h3>Importing new data. Please wait...</h3>
-                @_loadingStatus
-            </div>
-        }
-        else
-        {
-            @if (_selectedYear != null && !string.IsNullOrWhiteSpace(_selectedRecord?.Attachment))
+        <MudItem xs="4" Style="height: 96vh;">
+            @if (_loading)
             {
-                <h2>@_selectedRecord.Company | @_selectedRecord.Description | @Math.Abs(_selectedRecord.BankEntry.Amount) DKK</h2>
-
-                <iframe height="100%" src="@($"/pdf?filePath={_selectedRecord.Attachment}&unprocessedFolder={_selectedYear.UnprocessedReceiptsFolder}&processedFolder={_selectedYear.ProcessedReceiptsFolder}")">
-                </iframe>
+                <div style="height: 90vh; padding: 10px; overflow-y: scroll">
+                    <h3>Importing new data. Please wait...</h3>
+                    @_loadingStatus
+                </div>
             }
             else
             {
-                <div style="font-style: italic; color: silver; text-align: center; margin-top: 60px">Progress / Attachments are shown here</div>
+                @if (_selectedYear != null && !string.IsNullOrWhiteSpace(_selectedRecord?.Attachment))
+                {
+                    <h2>@_selectedRecord.Company | @_selectedRecord.Description | @Math.Abs(_selectedRecord.BankEntry.Amount) DKK</h2>
+
+                    <iframe height="100%" src="@($"/pdf?filePath={_selectedRecord.Attachment}&unprocessedFolder={_selectedYear.UnprocessedReceiptsFolder}&processedFolder={_selectedYear.ProcessedReceiptsFolder}")">
+                    </iframe>
+                }
+                else
+                {
+                    <div style="font-style: italic; color: silver; text-align: center; margin-top: 60px">Progress / Attachments are shown here</div>
+                }
             }
+        </MudItem>
         }
-    </MudItem>
-    }
-</MudGrid>
-<div style="font-size: 10px; color: gray">@_rootFolder</div>
+    </MudGrid>
+}
+<RCheckBox Label="@($"Test-Mode ({_rootFolder})")" Value="_testMode" ValueChanged="x => ChangeMode(x)"></RCheckBox>

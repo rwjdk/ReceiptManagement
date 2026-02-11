@@ -1,5 +1,5 @@
 using AgentFrameworkToolkit.AzureOpenAI;
-using BlazorApp;
+using Blazored.LocalStorage;
 using Logic;
 using Microsoft.AspNetCore.Mvc;
 using MudBlazor.Services;
@@ -18,6 +18,7 @@ builder.Services.AddAzureOpenAIEmbeddingFactory(connection);
 builder.Services.AddScoped<AccountController>();
 builder.Services.AddScoped<YearController>();
 builder.Services.AddScoped<VectorStoreController>();
+builder.Services.AddBlazoredLocalStorage();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 

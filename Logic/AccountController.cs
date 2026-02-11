@@ -8,6 +8,7 @@ using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using AgentFrameworkToolkit;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 
@@ -48,17 +49,16 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
         int year,
         Action<string> notifyProgress,
         MatchRule[] matchRules,
-        string newContent,
+        BankEntry[] entries,
         string pathToUnprocessedPdfs,
         Account account)
     {
         List<AccountRecord> newRecords = [];
-        BankEntry[] entries = ReadBankEntries(newContent, account).Where(x => x.Date.Year == year).ToArray();
         AccountRecord[] fromBankEntries = FromBankEntries(entries, matchRules.ToArray());
         List<AccountRecord> toProcess = [];
         foreach (AccountRecord newRecord in fromBankEntries.Reverse())
         {
-            if (account.Records.Any(x => x.BankEntry == newRecord.BankEntry))
+            if (account.Records.Any(x => x.BankEntry.MatchKey() == newRecord.BankEntry.MatchKey()))
             {
                 continue;
             }
@@ -125,7 +125,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
             }
 
             string whatFileOfThese = "What File of these: " + searchResult + $" is the best match for this record: {newRecord} (Issuer, Amount (Might be different currency so adjust) and Month/Approximate Date is the best match-conditions). If nothing match then leave Filename null";
-            ChatClientAgentRunResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
+            ChatClientAgentResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
             VectorStoreRecord? bestMatch = vectorStoreSearchResult.FirstOrDefault(x => x.FileName.Equals(responseDocumentMatch.Result.FileName, StringComparison.CurrentCultureIgnoreCase));
 
             newRecord.Attachment = bestMatch?.FileName;
@@ -133,7 +133,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
             if (string.IsNullOrWhiteSpace(newRecord.Description) && bestMatch != null)
             {
                 notifyProgress.Invoke($"-- Determine what was purchased from {newRecord.Company})");
-                ChatClientAgentRunResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + bestMatch.Content);
+                ChatClientAgentResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + bestMatch.Content);
                 newRecord.Description = response.Result.ProductPurchased;
                 if (string.IsNullOrWhiteSpace(newRecord.Category))
                 {
@@ -159,14 +159,14 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
         if (matchResult.NeedDividedCompanyMatch)
         {
             string description = newRecord.Description ?? string.Empty;
-            ChatClientAgentRunResponse<DividendCompanyResult> response = await dividendCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newRecord.BankEntry.Text);
+            ChatClientAgentResponse<DividendCompanyResult> response = await dividendCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newRecord.BankEntry.Text);
             string yieldCompany = response.Result.CompanyName;
             description = description.Replace("<COMPANY>", yieldCompany);
             newRecord.Description = description;
         }
     }
 
-    public BankEntry[] ReadBankEntries(string content, Account account)
+    public BankEntry[] ReadBankEntries(string content)
     {
         List<BankEntry> result = [];
         string[] lines = content.Split('\n');
@@ -179,17 +179,18 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
                 NumberDecimalSeparator = ","
             });
             string text = parts[3];
+            string accountNumber = parts[2];
             decimal balance = decimal.Parse(parts[4], new NumberFormatInfo
             {
                 NumberDecimalSeparator = ","
             });
-            result.Add(new BankEntry(date, text, amount, balance));
+            result.Add(new BankEntry(date, text, amount, balance, accountNumber));
         }
 
         return result.ToArray();
     }
 
-    private AccountRecord[] FromBankEntries(BankEntry[] bankEntries, MatchRule[] matchRules)
+    public AccountRecord[] FromBankEntries(BankEntry[] bankEntries, MatchRule[] matchRules)
     {
         List<AccountRecord> result = [];
         foreach (BankEntry bankEntry in bankEntries)

@@ -4,6 +4,7 @@ namespace Logic.Models;
 
 public class Account
 {
+    public required string Number { get; set; }
     public required string Name { get; set; }
     public required List<AccountRecord> Records { get; set; }
 

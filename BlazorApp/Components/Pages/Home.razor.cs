@@ -1,10 +1,13 @@
-﻿using JetBrains.Annotations;
+﻿using Blazored.LocalStorage;
+using JetBrains.Annotations;
 using Logic;
-using Microsoft.AspNetCore.Components.Forms;
-using MudBlazor;
-using System.Text;
 using Logic.Models;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Http.HttpResults;
+using MudBlazor;
+using System.Security.Principal;
+using System.Text;
 
 namespace BlazorApp.Components.Pages;
 
@@ -13,7 +16,8 @@ public partial class Home(
     IConfiguration configuration,
     AccountController accountController,
     ISnackbar snackBar,
-    YearController yearController)
+    YearController yearController,
+    ILocalStorageService localStorageService)
 {
     private string _rootFolder = null!;
     private readonly List<YearFolder> _years = [];
@@ -26,6 +30,9 @@ public partial class Home(
     private bool _showConfirmed = false;
     private string[] _unprocessedPdfs = [];
     private MatchRule[] _matchRules = [];
+    private bool _testMode;
+    private bool _initialized;
+
 
     public IEnumerable<AccountRecord> LinesToShow
     {
@@ -40,17 +47,25 @@ public partial class Home(
         }
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        _rootFolder = configuration["RootFolder"]!;
+        _testMode = await localStorageService.GetItemAsync<bool?>("TestMode") ?? false;
+        SwitchMode();
+    }
+
+    private void SwitchMode()
+    {
+        _initialized = false;
+        _rootFolder = _testMode ? configuration["RootFolderTest"]! : configuration["RootFolderProd"]!;
         _categories = configuration.GetSection("Categories").Get<string[]>() ?? [];
         _matchRules = configuration.GetSection("MatchRules").Get<MatchRule[]>() ?? [];
         InitializeYears();
+        _initialized = true;
     }
 
     private void InitializeYears()
     {
-        string[] accountNames = configuration.GetSection("AccountNames").Get<string[]>() ?? [];
+        AccountConfig[] accounts = configuration.GetSection("Accounts").Get<AccountConfig[]>() ?? [];
         int currentYear = DateTime.Today.Year;
         string currentFolder = Path.Combine(_rootFolder, currentYear.ToString());
         if (!Directory.Exists(currentFolder))
@@ -65,7 +80,7 @@ public partial class Home(
             {
                 string dataFilePath = Path.Combine(yearFolder, "Data.json");
 
-                Data data = yearController.GetOrCreate(dataFilePath, accountNames);
+                Data data = yearController.GetOrCreate(dataFilePath, accounts);
                 YearFolder folder = new(year, yearFolder, data);
                 Directory.CreateDirectory(folder.UnprocessedReceiptsFolder);
                 Directory.CreateDirectory(folder.ProcessedReceiptsFolder);
@@ -104,11 +119,21 @@ public partial class Home(
             await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
             using StreamReader reader = new(stream, Encoding.UTF8);
             string bankFileContent = await reader.ReadToEndAsync();
+            BankEntry[] entries = accountController.ReadBankEntries(bankFileContent).Where(x => x.Date.Year == _selectedYear.Year).ToArray();
 
-            List<AccountRecord> newRecords = await accountController.GetNewRecords(_selectedYear.Year, NotifyProgress, _matchRules, bankFileContent, _selectedYear.UnprocessedReceiptsFolder, _selectedAccount);
-            snackBar.Add($"{newRecords.Count} new records imported", Severity.Success);
-            _selectedAccount.Records.AddRange(newRecords);
-            yearController.Update(_selectedYear);
+            if (entries.Any())
+            {
+                string accountNumber = entries.First().AccountNumber;
+                _selectedAccount = _selectedYear.Data.Accounts.FirstOrDefault(x => x.Number == accountNumber);
+                List<AccountRecord> newRecords = await accountController.GetNewRecords(_selectedYear.Year, NotifyProgress, _matchRules, entries, _selectedYear.UnprocessedReceiptsFolder, _selectedAccount);
+                snackBar.Add($"{newRecords.Count} new records imported", Severity.Success);
+                _selectedAccount.Records.AddRange(newRecords);
+                yearController.Update(_selectedYear);
+            }
+            else
+            {
+                snackBar.Add("No data in file", Severity.Warning);
+            }
         }
         finally
         {
@@ -258,5 +283,28 @@ public partial class Home(
             _loadingStatus = new MarkupString();
             _loading = false;
         }
+    }
+
+    private void ChangeMode(bool testMode)
+    {
+        _selectedYear = null;
+        _selectedAccount = null;
+        _selectedRecord = null;
+        _years.Clear();
+        _testMode = testMode;
+        localStorageService.SetItemAsync("TestMode", testMode);
+        SwitchMode();
+        StateHasChanged();
+    }
+
+    private void DeleteRecord(AccountRecord record)
+    {
+        if (_selectedAccount == null || _selectedYear == null)
+        {
+            return;
+        }
+        //todo - add confirm dialog
+        _selectedAccount.Records.Remove(record);
+        yearController.Update(_selectedYear);
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using AgentFrameworkToolkit;
 using AgentFrameworkToolkit.AzureOpenAI;
 using AgentFrameworkToolkit.OpenAI;
 using Logic.Models;
@@ -84,7 +85,7 @@ public class VectorStoreController(AzureOpenAIEmbeddingFactory embeddingFactory,
                                        - Remove customer date (RWJ Invest / Rasmus Wulff Jensen)
                                        - Remove their Address (Chr. Winthers vej 83,st,tv 8230 Åbyhøj)
                                        """;
-                ChatClientAgentRunResponse<PdfDetails> response = await invoiceDetailsAgent.RunAsync<PdfDetails>(instructions);
+                ChatClientAgentResponse<PdfDetails> response = await invoiceDetailsAgent.RunAsync<PdfDetails>(instructions);
 
                 PdfDetails result = response.Result;
                 await vectorStoreCollection.UpsertAsync(new VectorStoreRecord

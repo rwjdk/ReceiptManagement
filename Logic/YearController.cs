@@ -6,16 +6,17 @@ namespace Logic;
 
 public class YearController
 {
-    public Data GetOrCreate(string path, string[] accountNames)
+    public Data GetOrCreate(string path, AccountConfig[] accountConfigs)
     {
         if (!File.Exists(path))
         {
             List<Account> accounts = [];
-            foreach (string accountName in accountNames)
+            foreach (AccountConfig configAccount in accountConfigs)
             {
                 Account account = new()
                 {
-                    Name = accountName,
+                    Number = configAccount.AccountNumber,
+                    Name = configAccount.AccountName,
                     Records = []
                 };
                 accounts.Add(account);
