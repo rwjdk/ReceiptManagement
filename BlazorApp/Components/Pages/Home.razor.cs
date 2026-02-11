@@ -17,6 +17,7 @@ public partial class Home(
     AccountController accountController,
     ISnackbar snackBar,
     YearController yearController,
+    IDialogService dialogService,
     ILocalStorageService localStorageService)
 {
     private string _rootFolder = null!;
@@ -43,7 +44,7 @@ public partial class Home(
                 return [];
             }
 
-            return _showConfirmed ? _selectedAccount.Records.OrderBy(x => x.LineNum) : _selectedAccount.Records.Where(x => !x.Confirmed).OrderBy(x => x.LineNum);
+            return _showConfirmed ? _selectedAccount.Records.OrderBy(x=> x.BankEntry.Date).ThenBy(x => x.LineNum) : _selectedAccount.Records.Where(x => !x.Confirmed).OrderBy(x => x.BankEntry.Date).ThenBy(x=> x.LineNum);
         }
     }
 
@@ -297,14 +298,42 @@ public partial class Home(
         StateHasChanged();
     }
 
-    private void DeleteRecord(AccountRecord record)
+    private async Task DeleteEntriesForMonth(int monthNumber)
     {
         if (_selectedAccount == null || _selectedYear == null)
         {
             return;
         }
-        //todo - add confirm dialog
-        _selectedAccount.Records.Remove(record);
+
+        List<AccountRecord> recordsToDelete = _selectedAccount.Records
+            .Where(x => x.BankEntry.Date.Year == _selectedYear.Year && x.BankEntry.Date.Month == monthNumber)
+            .ToList();
+
+        if (recordsToDelete.Count == 0)
+        {
+            snackBar.Add("No records found for selected month", Severity.Info);
+            return;
+        }
+
+        string monthName = new DateTime(_selectedYear.Year, monthNumber, 1).ToString("MMMM");
+        bool? confirmed = await dialogService.ShowMessageBox(
+            title: "Delete records for month",
+            markupMessage: new MarkupString($"Are you sure you want to delete <strong>{recordsToDelete.Count}</strong> record(s) for <strong>{monthName} {_selectedYear.Year}</strong>?"),
+            yesText: "Delete all",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _selectedAccount.Records.RemoveAll(x => x.BankEntry.Date.Year == _selectedYear.Year && x.BankEntry.Date.Month == monthNumber);
+        if (_selectedRecord != null && _selectedRecord.BankEntry.Date.Year == _selectedYear.Year && _selectedRecord.BankEntry.Date.Month == monthNumber)
+        {
+            _selectedRecord = null;
+        }
+
         yearController.Update(_selectedYear);
+        snackBar.Add($"Deleted {recordsToDelete.Count} records for {monthName} {_selectedYear.Year}", Severity.Success);
     }
 }

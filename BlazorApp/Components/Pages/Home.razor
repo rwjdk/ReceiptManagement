@@ -54,22 +54,20 @@
                              CommittedItemChanges="record => UpdateRecord(record)">
                     <GroupTemplate>
                         @{
-                            string month = new DateTime(2000, Convert.ToInt32(context.Grouping.Key), 1).ToString("MMMM");
+                            int monthNumber = Convert.ToInt32(context.Grouping.Key);
+                            string month = new DateTime(2000, monthNumber, 1).ToString("MMMM");
                         }
-                        <span style="font-weight:bold">
-                            <MudGrid>
-                                <MudItem>
-                                    @month[0].ToString().ToUpperInvariant()@month[1..]
-                                </MudItem>
-                                <MudSpacer/>
-                                <MudItem>
-                                    <div style="text-align: end">
-                                        @context.Grouping.Count() Records (@LinesToShow.Where(x => x.BankEntry.Date.Month == Convert.ToInt32(context.Grouping.Key)).Sum(x => x.BankEntry.Amount).ToString("N2") DKK)
-                                    </div>
-
-                                </MudItem>
-                            </MudGrid>
-                        </span>
+                        <div style="font-weight:bold; width:100%; display:flex; align-items:center; gap:8px;">
+                            <div>
+                                @month[0].ToString().ToUpperInvariant()@month[1..]
+                            </div>
+                            <div style="margin-left:auto; text-align:end;">
+                                @context.Grouping.Count() Records (@LinesToShow.Where(x => x.BankEntry.Date.Month == monthNumber).Sum(x => x.BankEntry.Amount).ToString("N2") DKK)
+                            </div>
+                            <div>
+                                <RIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="()=> DeleteEntriesForMonth(monthNumber)" ToolTip="Remove entries for month" />
+                            </div>
+                        </div>
                     </GroupTemplate>
                     <Columns>
                         <PropertyColumn Hidden Required="false" Editable="false" Property="x => x.BankEntry.Date.Month" Title="" Grouping/>
@@ -155,15 +153,17 @@
                                 </MudGrid>
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn Title="Balance" Editable="false" CellClass="f11" CellStyle="width:100px">
+                        <TemplateColumn Editable="false" CellClass="f11" CellStyle="width:150px;">
+                            <HeaderTemplate>
+                                <div style="width:100%; text-align:end;">
+                                    Balance
+                                </div>
+                            </HeaderTemplate>
                             <CellTemplate>
-                                @context.Item.BankEntry.Balance.ToString("N2")
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn Title="" Editable="false" CellClass="f11" CellStyle="width:90px">
-                            <CellTemplate>
-                                <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Refresh" OnClick="() => ReprocessRecord(context.Item)" ToolTip="Reprocess Record" />
-                                <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteRecord(context.Item)" ToolTip="DeleteRecord" />
+                                <div style="width:100%; display:flex; justify-content:flex-end; align-items:center;">
+                                    @context.Item.BankEntry.Balance.ToString("N2")
+                                    <RIconButton Disabled="@_loading" Icon="@Icons.Material.Filled.Refresh" OnClick="() => ReprocessRecord(context.Item)" ToolTip="Reprocess Record" />
+                                </div>
                             </CellTemplate>
                         </TemplateColumn>
                     </Columns>
