@@ -107,9 +107,9 @@ public partial class Home(
         _selectedRecord = arg.Item;
     }
 
-    private async Task UploadFile(IBrowserFile? file)
+    private async Task UploadFiles(IReadOnlyList<IBrowserFile>? files)
     {
-        if (_selectedAccount == null || file == null || _selectedYear == null)
+        if (files == null || files.Count == 0 || _selectedYear == null)
         {
             return;
         }
@@ -117,24 +117,52 @@ public partial class Home(
         try
         {
             _loading = true;
-            await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-            using StreamReader reader = new(stream, Encoding.UTF8);
-            string bankFileContent = await reader.ReadToEndAsync();
-            BankEntry[] entries = accountController.ReadBankEntries(bankFileContent).Where(x => x.Date.Year == _selectedYear.Year).ToArray();
+            int fileCounter = 1;
+            foreach (IBrowserFile file in files)
+            {
+                try
+                {
+                    NotifyProgress($"Processing file [{fileCounter}/{files.Count}] {file.Name}");
+                    fileCounter++;
 
-            if (entries.Any())
-            {
-                string accountNumber = entries.First().AccountNumber;
-                _selectedAccount = _selectedYear.Data.Accounts.FirstOrDefault(x => x.Number == accountNumber);
-                List<AccountRecord> newRecords = await accountController.GetNewRecords(_selectedYear.Year, NotifyProgress, _matchRules, entries, _selectedYear.UnprocessedReceiptsFolder, _selectedAccount);
-                snackBar.Add($"{newRecords.Count} new records imported", Severity.Success);
-                _selectedAccount.Records.AddRange(newRecords);
-                yearController.Update(_selectedYear);
+                    await using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                    using StreamReader reader = new(stream, Encoding.UTF8);
+                    string bankFileContent = await reader.ReadToEndAsync();
+                    BankEntry[] entries = accountController.ReadBankEntries(bankFileContent).Where(x => x.Date.Year == _selectedYear.Year).ToArray();
+
+                    if (!entries.Any())
+                    {
+                        snackBar.Add($"No data in file '{file.Name}'", Severity.Warning);
+                        continue;
+                    }
+
+                    string accountNumber = entries.First().AccountNumber;
+                    Account? accountForFile = _selectedYear.Data.Accounts.FirstOrDefault(x => x.Number == accountNumber);
+                    if (accountForFile == null)
+                    {
+                        snackBar.Add($"No account configured for account number '{accountNumber}' in file '{file.Name}'", Severity.Warning);
+                        continue;
+                    }
+
+                    List<AccountRecord> newRecords = await accountController.GetNewRecords(
+                        _selectedYear.Year,
+                        NotifyProgress,
+                        _matchRules,
+                        entries,
+                        _selectedYear.UnprocessedReceiptsFolder,
+                        accountForFile);
+
+                    accountForFile.Records.AddRange(newRecords);
+                    _selectedAccount = accountForFile;
+                    snackBar.Add($"{newRecords.Count} new records imported from '{file.Name}'", Severity.Success);
+                }
+                catch (Exception ex)
+                {
+                    snackBar.Add($"Failed to process '{file.Name}': {ex.Message}", Severity.Error);
+                }
             }
-            else
-            {
-                snackBar.Add("No data in file", Severity.Warning);
-            }
+
+            yearController.Update(_selectedYear);
         }
         finally
         {
@@ -257,6 +285,22 @@ public partial class Home(
     private string RowClassFunc(AccountRecord record, int line)
     {
         return record == _selectedRecord ? "selectedRow" : "";
+    }
+
+    private static bool ShouldShowMissingAttachmentWarning(AccountRecord record)
+    {
+        if (record.Confirmed || !string.IsNullOrWhiteSpace(record.Attachment))
+        {
+            return false;
+        }
+
+        if (record.MatchResults.Length == 1)
+        {
+            return record.MatchResults[0].NeedAttachment;
+        }
+
+        // 0 or multiple matches are treated as needing attachment lookup.
+        return true;
     }
 
     private void ChooseYear(YearFolder yearFolder)

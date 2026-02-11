@@ -24,7 +24,7 @@
                         <RSelect Disabled="_loading" T="Account" Label="Account" Items="_selectedYear.Data.Accounts.OrderBy(x => x.DisplayName)" @bind-Value="_selectedAccount" ToStringFunc="@(account => $"{account.DisplayName} - {account.RecordsDisplayName}")"/>
                     </MudItem>
                     <MudItem>
-                        <MudFileUpload Disabled="_loading" T="IBrowserFile" Accept=".csv" FilesChanged="UploadFile" MaximumFileCount="1">
+                        <MudFileUpload Disabled="_loading" T="IReadOnlyList<IBrowserFile>" Accept=".csv" FilesChanged="UploadFiles" MaximumFileCount="50">
                             <ActivatorContent>
                                 <RIconButton Icon="@Icons.Material.Filled.UploadFile"/>
                             </ActivatorContent>
@@ -121,36 +121,36 @@
                                 @context.Item.Category
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn Editable="false" Title="Att" CellClass="f11" CellStyle="width:50px">
+                        <TemplateColumn Editable="false" Title="Att" CellClass="f11" CellStyle="width:90px">
                             <CellTemplate>
-                                <MudGrid>
-                                    <MudItem xs="1">
-                                        <MudMenu Dense OpenChanged="GetUnprocessedPdfs">
-                                            <ActivatorContent>
-                                                @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
-                                                {
-                                                    <RIconButton Disabled="context.Item.Confirmed" Size="Size.Small" Icon="@Icons.Material.Filled.InsertLink"/>
-                                                }
-                                                else
-                                                {
-                                                    <RIconButton Disabled="context.Item.Confirmed" Icon="@Icons.Material.Filled.Add"/>
-                                                }
-                                            </ActivatorContent>
-                                            <ChildContent>
-                                                @foreach (string file in _unprocessedPdfs)
-                                                {
-                                                    <MudMenuItem OnClick="() => ChooseAttachment(file, context.Item)" Class="f11">@file</MudMenuItem>
-                                                }
-                                            </ChildContent>
-                                        </MudMenu>
-                                    </MudItem>
-                                    <MudItem xs="1">
-                                        @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
-                                        {
-                                            <RIconButton Disabled="context.Item.Confirmed" ToolTip="Remove Attachment" Icon="@Icons.Material.Outlined.Delete" OnClick="() => RemoveAttachment(context.Item)"/>
-                                        }
-                                    </MudItem>
-                                </MudGrid>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    @if (ShouldShowMissingAttachmentWarning(context.Item))
+                                    {
+                                        <span title="Attachment expected but missing" aria-label="Attachment expected but missing">⚠️</span>
+                                    }
+                                    <MudMenu Dense OpenChanged="GetUnprocessedPdfs">
+                                        <ActivatorContent>
+                                            @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                            {
+                                                <RIconButton Disabled="context.Item.Confirmed" Size="Size.Small" Icon="@Icons.Material.Filled.InsertLink"/>
+                                            }
+                                            else
+                                            {
+                                                <RIconButton Disabled="context.Item.Confirmed" Icon="@Icons.Material.Filled.Add"/>
+                                            }
+                                        </ActivatorContent>
+                                        <ChildContent>
+                                            @foreach (string file in _unprocessedPdfs)
+                                            {
+                                                <MudMenuItem OnClick="() => ChooseAttachment(file, context.Item)" Class="f11">@file</MudMenuItem>
+                                            }
+                                        </ChildContent>
+                                    </MudMenu>
+                                    @if (!string.IsNullOrWhiteSpace(context.Item.Attachment))
+                                    {
+                                        <RIconButton Disabled="context.Item.Confirmed" ToolTip="Remove Attachment" Icon="@Icons.Material.Outlined.Delete" OnClick="() => RemoveAttachment(context.Item)"/>
+                                    }
+                                </div>
                             </CellTemplate>
                         </TemplateColumn>
                         <TemplateColumn Editable="false" CellClass="f11" CellStyle="width:150px;">
