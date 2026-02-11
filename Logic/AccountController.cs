@@ -17,6 +17,8 @@ namespace Logic;
 //todo- refactor and clean
 public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStoreController vectorStoreController)
 {
+    private const string MultipleMatchesDescription = "MULTIPLE MATCHES - FIX THIS";
+
     public async Task ReprocessRecord(Action<string> notifyProgress, AccountRecord accountRecord, MatchRule[] matchRules, YearFolder yearFolder)
     {
         await Task.CompletedTask;
@@ -202,8 +204,11 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
                     MatchResult match = matchResults[0];
                     result.Add(new AccountRecord(bankEntry, matchResults, match.Company, match.Description, match.Category, false));
                     break;
-                default:
+                case 0:
                     result.Add(new AccountRecord(bankEntry, matchResults, null, null, null, false));
+                    break;
+                default:
+                    result.Add(new AccountRecord(bankEntry, matchResults, null, MultipleMatchesDescription, null, false));
                     break;
             }
         }
