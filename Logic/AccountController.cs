@@ -127,7 +127,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
             }
 
             string whatFileOfThese = "What File of these: " + searchResult + $" is the best match for this record: {newRecord} (Issuer, Amount (Might be different currency so adjust) and Month/Approximate Date is the best match-conditions). If nothing match then leave Filename null";
-            ChatClientAgentResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
+            AgentResponse<DocumentMatch> responseDocumentMatch = await invoiceDetailsAgent.RunAsync<DocumentMatch>(whatFileOfThese);
             VectorStoreRecord? bestMatch = vectorStoreSearchResult.FirstOrDefault(x => x.FileName.Equals(responseDocumentMatch.Result.FileName, StringComparison.CurrentCultureIgnoreCase));
 
             newRecord.Attachment = bestMatch?.FileName;
@@ -135,7 +135,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
             if (string.IsNullOrWhiteSpace(newRecord.Description) && bestMatch != null)
             {
                 notifyProgress.Invoke($"-- Determine what was purchased from {newRecord.Company})");
-                ChatClientAgentResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + bestMatch.Content);
+                AgentResponse<InvoiceResult> response = await invoiceDetailsAgent.RunAsync<InvoiceResult>("What was purchased here: " + bestMatch.Content);
                 newRecord.Description = response.Result.ProductPurchased;
                 if (string.IsNullOrWhiteSpace(newRecord.Category))
                 {
@@ -161,7 +161,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
         if (matchResult.NeedDividedCompanyMatch)
         {
             string description = newRecord.Description ?? string.Empty;
-            ChatClientAgentResponse<DividendCompanyResult> response = await dividendCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newRecord.BankEntry.Text);
+            AgentResponse<DividendCompanyResult> response = await dividendCompanyAgent.RunAsync<DividendCompanyResult>("What company does this refer to?: " + newRecord.BankEntry.Text);
             string yieldCompany = response.Result.CompanyName;
             description = description.Replace("<COMPANY>", yieldCompany);
             newRecord.Description = description;
