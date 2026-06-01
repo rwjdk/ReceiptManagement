@@ -212,7 +212,15 @@ public partial class Home(
 
                 if (File.Exists(source))
                 {
-                    File.Move(source, target);
+                    if (File.Exists(target))
+                    {
+                        string uniqueName = Path.GetFileNameWithoutExtension(target)+$"_{Guid.NewGuid()}."+Path.GetExtension(target);
+                        File.Move(source, uniqueName);
+                    }
+                    else
+                    {
+                        File.Move(source, target);
+                    }
                     record.Attachment = newAttachmentName;
                 }
                 else

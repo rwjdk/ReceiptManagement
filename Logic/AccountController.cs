@@ -108,9 +108,9 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         return agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt5Mini,
+            Model = OpenAIChatModels.Gpt54,
             Instructions = "You are an Expert in analyzing Invoices and what was purchased",
-            ReasoningEffort = OpenAIReasoningEffort.Minimal
+            ReasoningEffort = OpenAIReasoningEffort.Low
         });
     }
 
@@ -149,9 +149,9 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         AzureOpenAIAgent dividendCompanyAgent = agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt52,
+            Model = OpenAIChatModels.Gpt54,
             Instructions = "You are a Stock Expert",
-            ReasoningEffort = OpenAIReasoningEffort.Minimal
+            ReasoningEffort = OpenAIReasoningEffort.Low
         });
         return dividendCompanyAgent;
     }
