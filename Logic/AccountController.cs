@@ -108,7 +108,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         return agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt54,
+            Model = OpenAIChatModels.Gpt41,
             Instructions = "You are an Expert in analyzing Invoices and what was purchased",
             ReasoningEffort = OpenAIReasoningEffort.Low
         });
