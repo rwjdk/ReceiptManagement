@@ -2,10 +2,10 @@
 using AgentFrameworkToolkit;
 using AgentFrameworkToolkit.AzureOpenAI;
 using AgentFrameworkToolkit.OpenAI;
+using CommunityToolkit.VectorData.SqliteVec;
 using Logic.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.VectorData;
-using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 
@@ -40,7 +40,7 @@ public class VectorStoreController(AzureOpenAIEmbeddingFactory embeddingFactory,
 
         AzureOpenAIAgent invoiceDetailsAgent = agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt5Mini,
+            Model = OpenAIChatModels.Gpt56Terra,
             Instructions = "You are an Expert in analyzing raw PDF Data and extracting what was bought",
             ReasoningEffort = OpenAIReasoningEffort.Minimal
         });

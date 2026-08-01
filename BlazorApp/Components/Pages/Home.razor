@@ -26,7 +26,10 @@
                     <MudItem>
                         <MudFileUpload Disabled="_loading" T="IReadOnlyList<IBrowserFile>" Accept=".csv" FilesChanged="UploadFiles" MaximumFileCount="50">
                             <ActivatorContent>
-                                <RIconButton Icon="@Icons.Material.Filled.UploadFile"/>
+                                <RIconButton Icon="@Icons.Material.Filled.UploadFile"
+                                             ToolTip="Upload bank CSV files"
+                                             aria-label="Upload bank CSV files"
+                                             data-testid="bank-csv-upload"/>
                             </ActivatorContent>
                         </MudFileUpload>
                     </MudItem>

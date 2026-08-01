@@ -1,4 +1,5 @@
 using AgentFrameworkToolkit.AzureOpenAI;
+using AgentFrameworkToolkit.OpenAI;
 using Blazored.LocalStorage;
 using Logic;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,8 @@ builder.Services.AddMudServices();
 AzureOpenAIConnection connection = new()
 {
     Endpoint = builder.Configuration["AzureOpenAIEndpoint"]!,
-    ApiKey = builder.Configuration["AzureOpenAIApiKey"]!
+    ApiKey = builder.Configuration["AzureOpenAIApiKey"]!,
+    DefaultClientType = ClientType.ResponsesApi
 };
 builder.Services.AddMemoryCache();
 builder.Services.AddAzureOpenAIAgentFactory(connection);

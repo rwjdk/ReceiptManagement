@@ -3,14 +3,9 @@ using AgentFrameworkToolkit.OpenAI;
 using JetBrains.Annotations;
 using Logic.Models;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.VectorData;
-using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
-using AgentFrameworkToolkit;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.Content;
 
 namespace Logic;
 
@@ -108,7 +103,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         return agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt41,
+            Model = OpenAIChatModels.Gpt56Terra,
             Instructions = "You are an Expert in analyzing Invoices and what was purchased",
             ReasoningEffort = OpenAIReasoningEffort.Low
         });
@@ -149,7 +144,7 @@ public class AccountController(AzureOpenAIAgentFactory agentFactory, VectorStore
     {
         AzureOpenAIAgent dividendCompanyAgent = agentFactory.CreateAgent(new AgentOptions
         {
-            Model = OpenAIChatModels.Gpt54,
+            Model = OpenAIChatModels.Gpt56Terra,
             Instructions = "You are a Stock Expert",
             ReasoningEffort = OpenAIReasoningEffort.Low
         });
